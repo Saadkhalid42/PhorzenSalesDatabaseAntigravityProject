@@ -1,0 +1,352 @@
+import { create } from 'zustand'
+
+export type FilterOperator = 'contains' | 'is' | 'is not empty' | 'is empty'
+
+export interface FilterRule {
+  id: string
+  field: string
+  operator: FilterOperator
+  value: string
+  combinator: 'and' | 'or' 
+}
+
+export interface SortRule {
+  id: string
+  field: string
+  direction: 'asc' | 'desc'
+}
+
+export interface CellUpdate {
+  rowId: string
+  rowIdKey: string // usually 'id' or 'Lead ID' or 'lead_id'
+  columnId: string
+  oldValue: any
+  newValue: any
+}
+
+export interface HistoryAction {
+  id: string
+  updates: CellUpdate[]
+}
+
+interface Workspace { id: string, name: string, icon?: string }
+interface View { id: string, name: string, icon?: string, type?: 'grid' | 'cards' }
+
+export interface ViewConfig {
+  columnOrder: string[]
+  filters: FilterRule[]
+  sorts: SortRule[]
+  frozenColumns: string[]
+  hiddenColumns: string[]
+  searchQuery: string
+  rowHeight: number
+}
+
+const DEFAULT_VIEW_CONFIG: ViewConfig = {
+  columnOrder: [],
+  filters: [],
+  sorts: [],
+  frozenColumns: [],
+  hiddenColumns: [],
+  searchQuery: '',
+  rowHeight: 36
+}
+
+interface AppState {
+  workspaces: Workspace[]
+  workspaceViews: Record<string, View[]>
+  viewConfigs: Record<string, ViewConfig>
+  
+  views: View[] // derived for current workspace
+  
+  activeWorkspaceId: string
+  activeViewId: string
+  
+  hydrateState: (state: Partial<AppState>) => void
+  
+  setWorkspaces: (ws: Workspace[]) => void
+  setViews: (vs: View[]) => void
+  setActiveWorkspaceId: (id: string) => void
+  setActiveViewId: (id: string) => void
+  
+  addWorkspace: (name: string, icon?: string) => void
+  renameWorkspace: (id: string, name: string, icon?: string) => void
+  deleteWorkspace: (id: string) => void
+  
+  addView: (name: string, icon?: string, type?: 'grid' | 'cards') => void
+  renameView: (id: string, name: string, icon?: string) => void
+  deleteView: (id: string) => void
+  reorderWorkspaces: (from: number, to: number) => void
+  reorderViews: (from: number, to: number) => void
+
+  columnOrder: string[]
+  setColumnOrder: (order: string[]) => void
+  
+  filters: FilterRule[]
+  setFilters: (filters: FilterRule[]) => void
+  addFilter: (filter: FilterRule) => void
+  removeFilter: (id: string) => void
+  updateFilter: (id: string, updates: Partial<FilterRule>) => void
+
+  sorts: SortRule[]
+  setSorts: (sorts: SortRule[]) => void
+  addSort: (sort: SortRule) => void
+  removeSort: (id: string) => void
+  updateSort: (id: string, updates: Partial<SortRule>) => void
+
+  dataVersion: number
+  incrementDataVersion: () => void
+
+  frozenColumns: string[]
+  setFrozenColumns: (cols: string[]) => void
+  toggleFrozenColumn: (col: string) => void
+
+  rowHeight: number
+  setRowHeight: (height: number) => void
+
+  hiddenColumns: string[]
+  setHiddenColumns: (cols: string[]) => void
+  toggleHiddenColumn: (col: string) => void
+
+  availableFields: string[]
+  setAvailableFields: (fields: string[]) => void
+
+  searchQuery: string
+  setSearchQuery: (query: string) => void
+
+  // History
+  undoStack: HistoryAction[]
+  redoStack: HistoryAction[]
+  pushHistory: (action: Omit<HistoryAction, 'id'>) => void
+  popUndo: () => HistoryAction | null
+  popRedo: () => HistoryAction | null
+  clearHistory: () => void
+}
+
+const initialWorkspaceId = 'w-1'
+const secondWorkspaceId = 'w-2'
+const initialViewId = 'v-1'
+const initialViews = [{ id: 'v-1', name: 'Grid' }, { id: 'v-2', name: 'Follow up' }]
+const sharehViews = [{ id: 'v-3', name: 'Grid' }]
+
+export const useStore = create<AppState>((set, get) => ({
+  workspaces: [
+    { id: initialWorkspaceId, name: 'Saad' },
+    { id: secondWorkspaceId, name: 'shareh' }
+  ],
+  workspaceViews: { 
+    [initialWorkspaceId]: initialViews,
+    [secondWorkspaceId]: sharehViews
+  },
+  viewConfigs: { [initialViewId]: DEFAULT_VIEW_CONFIG, 'v-3': DEFAULT_VIEW_CONFIG },
+  
+  views: initialViews,
+  
+  activeWorkspaceId: initialWorkspaceId,
+  activeViewId: initialViewId,
+  
+  hydrateState: (newState) => set((state) => ({ ...state, ...newState })),
+  
+  setWorkspaces: (ws) => set({ workspaces: ws }),
+  setViews: (vs) => set((state) => ({ 
+    views: vs,
+    workspaceViews: { ...state.workspaceViews, [state.activeWorkspaceId]: vs }
+  })),
+  
+  setActiveWorkspaceId: (id) => set((state) => {
+    const viewsForWs = state.workspaceViews[id] || [{ id: `v-${Date.now()}`, name: 'Grid' }]
+    const firstView = viewsForWs[0]
+    const nextConfig = state.viewConfigs[firstView.id] || DEFAULT_VIEW_CONFIG
+    return {
+      activeWorkspaceId: id,
+      views: viewsForWs,
+      workspaceViews: { ...state.workspaceViews, [id]: viewsForWs },
+      activeViewId: firstView.id,
+      ...nextConfig
+    }
+  }),
+  
+  setActiveViewId: (id) => set((state) => {
+    const nextConfig = state.viewConfigs[id] || DEFAULT_VIEW_CONFIG
+    return {
+      activeViewId: id,
+      ...nextConfig
+    }
+  }),
+
+  addWorkspace: (name, icon) => set((state) => {
+    const newWs = { id: `w-${Date.now()}`, name, icon }
+    return { workspaces: [...state.workspaces, newWs], activeWorkspaceId: newWs.id }
+  }),
+  renameWorkspace: (id, name, icon) => set((state) => ({
+    workspaces: state.workspaces.map(w => w.id === id ? { ...w, name, icon: icon !== undefined ? icon : w.icon } : w)
+  })),
+  deleteWorkspace: (id) => set((state) => {
+    const ws = state.workspaces.filter(w => w.id !== id)
+    return { workspaces: ws, activeWorkspaceId: state.activeWorkspaceId === id ? (ws[0]?.id || '') : state.activeWorkspaceId }
+  }),
+  reorderWorkspaces: (from, to) => set((state) => {
+    const ws = [...state.workspaces]
+    const [moved] = ws.splice(from, 1)
+    ws.splice(to, 0, moved)
+    return { workspaces: ws }
+  }),
+
+  addView: (name, icon, type) => set((state) => {
+    const newView: View = { id: `v-${Date.now()}`, name, icon, type: type || 'grid' }
+    const newViews = [...state.views, newView]
+    return { 
+      views: newViews, 
+      workspaceViews: { ...state.workspaceViews, [state.activeWorkspaceId]: newViews },
+      activeViewId: newView.id,
+      viewConfigs: { ...state.viewConfigs, [newView.id]: DEFAULT_VIEW_CONFIG },
+      ...DEFAULT_VIEW_CONFIG
+    }
+  }),
+  renameView: (id, name, icon) => set((state) => {
+    const newViews = state.views.map(v => v.id === id ? { ...v, name, icon: icon !== undefined ? icon : v.icon } : v)
+    return {
+      views: newViews,
+      workspaceViews: { ...state.workspaceViews, [state.activeWorkspaceId]: newViews }
+    }
+  }),
+  deleteView: (id) => set((state) => {
+    const newViews = state.views.filter(v => v.id !== id)
+    if (newViews.length === 0) newViews.push({ id: `v-${Date.now()}`, name: 'Grid' })
+    const nextActiveId = state.activeViewId === id ? newViews[0].id : state.activeViewId
+    const nextConfig = state.viewConfigs[nextActiveId] || DEFAULT_VIEW_CONFIG
+    return { 
+      views: newViews, 
+      workspaceViews: { ...state.workspaceViews, [state.activeWorkspaceId]: newViews },
+      activeViewId: nextActiveId,
+      ...(state.activeViewId === id ? nextConfig : {})
+    }
+  }),
+  reorderViews: (from, to) => set((state) => {
+    const vs = [...state.views]
+    const [moved] = vs.splice(from, 1)
+    vs.splice(to, 0, moved)
+    return { 
+      views: vs,
+      workspaceViews: { ...state.workspaceViews, [state.activeWorkspaceId]: vs }
+    }
+  }),
+
+  columnOrder: [],
+  setColumnOrder: (order) => set((state) => ({ 
+    columnOrder: order,
+    viewConfigs: { ...state.viewConfigs, [state.activeViewId]: { ...(state.viewConfigs[state.activeViewId] || DEFAULT_VIEW_CONFIG), columnOrder: order } }
+  })),
+
+  filters: [],
+  setFilters: (filters) => set((state) => ({ 
+    filters,
+    viewConfigs: { ...state.viewConfigs, [state.activeViewId]: { ...(state.viewConfigs[state.activeViewId] || DEFAULT_VIEW_CONFIG), filters } }
+  })),
+  addFilter: (filter) => set((state) => {
+    const newFilters = [...state.filters, filter]
+    return { filters: newFilters, viewConfigs: { ...state.viewConfigs, [state.activeViewId]: { ...(state.viewConfigs[state.activeViewId] || DEFAULT_VIEW_CONFIG), filters: newFilters } } }
+  }),
+  removeFilter: (id) => set((state) => {
+    const newFilters = state.filters.filter(f => f.id !== id)
+    return { filters: newFilters, viewConfigs: { ...state.viewConfigs, [state.activeViewId]: { ...(state.viewConfigs[state.activeViewId] || DEFAULT_VIEW_CONFIG), filters: newFilters } } }
+  }),
+  updateFilter: (id, updates) => set((state) => {
+    const newFilters = state.filters.map(f => f.id === id ? { ...f, ...updates } : f)
+    return { filters: newFilters, viewConfigs: { ...state.viewConfigs, [state.activeViewId]: { ...(state.viewConfigs[state.activeViewId] || DEFAULT_VIEW_CONFIG), filters: newFilters } } }
+  }),
+
+  sorts: [],
+  setSorts: (sorts) => set((state) => ({ 
+    sorts,
+    viewConfigs: { ...state.viewConfigs, [state.activeViewId]: { ...(state.viewConfigs[state.activeViewId] || DEFAULT_VIEW_CONFIG), sorts } }
+  })),
+  addSort: (sort) => set((state) => {
+    const newSorts = [...state.sorts, sort]
+    return { sorts: newSorts, viewConfigs: { ...state.viewConfigs, [state.activeViewId]: { ...(state.viewConfigs[state.activeViewId] || DEFAULT_VIEW_CONFIG), sorts: newSorts } } }
+  }),
+  removeSort: (id) => set((state) => {
+    const newSorts = state.sorts.filter(s => s.id !== id)
+    return { sorts: newSorts, viewConfigs: { ...state.viewConfigs, [state.activeViewId]: { ...(state.viewConfigs[state.activeViewId] || DEFAULT_VIEW_CONFIG), sorts: newSorts } } }
+  }),
+  updateSort: (id, updates) => set((state) => {
+    const newSorts = state.sorts.map(s => s.id === id ? { ...s, ...updates } : s)
+    return { sorts: newSorts, viewConfigs: { ...state.viewConfigs, [state.activeViewId]: { ...(state.viewConfigs[state.activeViewId] || DEFAULT_VIEW_CONFIG), sorts: newSorts } } }
+  }),
+
+  dataVersion: 0,
+  incrementDataVersion: () => set((state) => ({ dataVersion: state.dataVersion + 1 })),
+
+  frozenColumns: [],
+  setFrozenColumns: (cols) => set((state) => ({ 
+    frozenColumns: cols,
+    viewConfigs: { ...state.viewConfigs, [state.activeViewId]: { ...(state.viewConfigs[state.activeViewId] || DEFAULT_VIEW_CONFIG), frozenColumns: cols } }
+  })),
+  toggleFrozenColumn: (col) => set((state) => {
+    const cols = state.frozenColumns.includes(col) 
+      ? state.frozenColumns.filter(c => c !== col)
+      : [...state.frozenColumns, col]
+    return { frozenColumns: cols, viewConfigs: { ...state.viewConfigs, [state.activeViewId]: { ...(state.viewConfigs[state.activeViewId] || DEFAULT_VIEW_CONFIG), frozenColumns: cols } } }
+  }),
+
+  rowHeight: 36,
+  setRowHeight: (height) => set((state) => ({ 
+    rowHeight: height,
+    viewConfigs: { ...state.viewConfigs, [state.activeViewId]: { ...(state.viewConfigs[state.activeViewId] || DEFAULT_VIEW_CONFIG), rowHeight: height } }
+  })),
+
+  hiddenColumns: [],
+  setHiddenColumns: (cols) => set((state) => ({ 
+    hiddenColumns: cols,
+    viewConfigs: { ...state.viewConfigs, [state.activeViewId]: { ...(state.viewConfigs[state.activeViewId] || DEFAULT_VIEW_CONFIG), hiddenColumns: cols } }
+  })),
+  toggleHiddenColumn: (col) => set((state) => {
+    const cols = state.hiddenColumns.includes(col)
+      ? state.hiddenColumns.filter(c => c !== col)
+      : [...state.hiddenColumns, col]
+    return { hiddenColumns: cols, viewConfigs: { ...state.viewConfigs, [state.activeViewId]: { ...(state.viewConfigs[state.activeViewId] || DEFAULT_VIEW_CONFIG), hiddenColumns: cols } } }
+  }),
+
+  availableFields: [],
+  setAvailableFields: (fields) => set({ availableFields: fields }),
+
+  searchQuery: '',
+  setSearchQuery: (query) => set((state) => ({ 
+    searchQuery: query,
+    viewConfigs: { ...state.viewConfigs, [state.activeViewId]: { ...(state.viewConfigs[state.activeViewId] || DEFAULT_VIEW_CONFIG), searchQuery: query } }
+  })),
+
+  undoStack: [],
+  redoStack: [],
+  pushHistory: (action) => set((state) => ({
+    undoStack: [...state.undoStack, { ...action, id: Date.now().toString() }],
+    redoStack: [] // clear redo stack on new action
+  })),
+  popUndo: () => {
+    let action: HistoryAction | null = null
+    set((state) => {
+      if (state.undoStack.length === 0) return state
+      const newUndo = [...state.undoStack]
+      action = newUndo.pop()!
+      return {
+        undoStack: newUndo,
+        redoStack: [...state.redoStack, action]
+      }
+    })
+    return action
+  },
+  popRedo: () => {
+    let action: HistoryAction | null = null
+    set((state) => {
+      if (state.redoStack.length === 0) return state
+      const newRedo = [...state.redoStack]
+      action = newRedo.pop()!
+      return {
+        redoStack: newRedo,
+        undoStack: [...state.undoStack, action]
+      }
+    })
+    return action
+  },
+  clearHistory: () => set({ undoStack: [], redoStack: [] })
+}))

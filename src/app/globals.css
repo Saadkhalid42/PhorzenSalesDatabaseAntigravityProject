@@ -1,26 +1,199 @@
 @import "tailwindcss";
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ═══════════════════════════════════════════════
+   LIGHT THEMES
+═══════════════════════════════════════════════ */
+
+/* ── Snow: Pure white + crisp blue ────────────── */
+html.snow {
+  color-scheme: light;
+  --background:          oklch(1 0 0);
+  --foreground:          oklch(0.22 0.02 250);
+  --border:              oklch(0.90 0.01 250);
+  --input:               oklch(0.90 0.01 250);
+  --ring:                oklch(0.55 0.18 255);
+  --primary:             oklch(0.55 0.18 255);
+  --primary-foreground:  oklch(1 0 0);
+  --secondary:           oklch(0.96 0.02 250);
+  --secondary-foreground:oklch(0.28 0.04 250);
+  --muted:               oklch(0.96 0.01 250);
+  --muted-foreground:    oklch(0.52 0.02 250);
+  --accent:              oklch(0.93 0.04 250);
+  --accent-foreground:   oklch(0.28 0.06 250);
+  --destructive:         oklch(0.58 0.22 20);
+  --destructive-foreground: oklch(1 0 0);
+  --popover:             oklch(1 0 0);
+  --popover-foreground:  oklch(0.22 0.02 250);
+  --card:                oklch(0.99 0 0);
+  --card-foreground:     oklch(0.22 0.02 250);
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ── Lavender: Soft pastel purple ─────────────── */
+html.lavender {
+  color-scheme: light;
+  --background:          oklch(0.98 0.01 290);
+  --foreground:          oklch(0.22 0.04 290);
+  --border:              oklch(0.88 0.04 290);
+  --input:               oklch(0.88 0.04 290);
+  --ring:                oklch(0.55 0.20 290);
+  --primary:             oklch(0.55 0.20 290);
+  --primary-foreground:  oklch(1 0 0);
+  --secondary:           oklch(0.94 0.04 290);
+  --secondary-foreground:oklch(0.30 0.06 290);
+  --muted:               oklch(0.94 0.03 290);
+  --muted-foreground:    oklch(0.52 0.05 290);
+  --accent:              oklch(0.91 0.06 290);
+  --accent-foreground:   oklch(0.28 0.08 290);
+  --destructive:         oklch(0.58 0.22 20);
+  --destructive-foreground: oklch(1 0 0);
+  --popover:             oklch(0.98 0.01 290);
+  --popover-foreground:  oklch(0.22 0.04 290);
+  --card:                oklch(0.97 0.02 290);
+  --card-foreground:     oklch(0.22 0.04 290);
 }
+
+/* ── Parchment: Warm cream + amber ────────────── */
+html.parchment {
+  color-scheme: light;
+  --background:          oklch(0.98 0.02 80);
+  --foreground:          oklch(0.24 0.04 60);
+  --border:              oklch(0.88 0.04 80);
+  --input:               oklch(0.88 0.04 80);
+  --ring:                oklch(0.60 0.16 60);
+  --primary:             oklch(0.60 0.16 60);
+  --primary-foreground:  oklch(1 0 0);
+  --secondary:           oklch(0.94 0.04 80);
+  --secondary-foreground:oklch(0.32 0.06 60);
+  --muted:               oklch(0.94 0.03 80);
+  --muted-foreground:    oklch(0.52 0.05 70);
+  --accent:              oklch(0.91 0.06 70);
+  --accent-foreground:   oklch(0.28 0.08 60);
+  --destructive:         oklch(0.58 0.22 20);
+  --destructive-foreground: oklch(1 0 0);
+  --popover:             oklch(0.98 0.02 80);
+  --popover-foreground:  oklch(0.24 0.04 60);
+  --card:                oklch(0.97 0.03 80);
+  --card-foreground:     oklch(0.24 0.04 60);
+}
+
+/* ═══════════════════════════════════════════════
+   DARK THEMES
+═══════════════════════════════════════════════ */
+
+/* ── Midnight: Deep navy blue ────────────────── */
+html.midnight {
+  color-scheme: dark;
+  --background:          #0f172a;
+  --foreground:          #f8fafc;
+  --border:              #1e293b;
+  --input:               #1e293b;
+  --ring:                #60a5fa;
+  --primary:             #60a5fa;
+  --primary-foreground:  #0f172a;
+  --secondary:           #1e293b;
+  --secondary-foreground:#f8fafc;
+  --muted:               #1e293b;
+  --muted-foreground:    #94a3b8;
+  --accent:              #1e293b;
+  --accent-foreground:   #f8fafc;
+  --destructive:         #ef4444;
+  --destructive-foreground: #ffffff;
+  --popover:             #0f172a;
+  --popover-foreground:  #f8fafc;
+  --card:                #0f172a;
+  --card-foreground:     #f8fafc;
+}
+
+/* ── Obsidian: Near-black with zinc accents ───── */
+html.obsidian {
+  color-scheme: dark;
+  --background:          #09090b;
+  --foreground:          #fafafa;
+  --border:              #27272a;
+  --input:               #27272a;
+  --ring:                #e4e4e7;
+  --primary:             #e4e4e7;
+  --primary-foreground:  #09090b;
+  --secondary:           #18181b;
+  --secondary-foreground:#fafafa;
+  --muted:               #18181b;
+  --muted-foreground:    #a1a1aa;
+  --accent:              #18181b;
+  --accent-foreground:   #fafafa;
+  --destructive:         #ef4444;
+  --destructive-foreground: #ffffff;
+  --popover:             #09090b;
+  --popover-foreground:  #fafafa;
+  --card:                #09090b;
+  --card-foreground:     #fafafa;
+}
+
+/* ── Graphite: Warm dark grey ─────────────────── */
+html.graphite {
+  color-scheme: dark;
+  --background:          #1c1c1e;
+  --foreground:          #f4f4f5;
+  --border:              #3f3f46;
+  --input:               #3f3f46;
+  --ring:                #a1a1aa;
+  --primary:             #a1a1aa;
+  --primary-foreground:  #1c1c1e;
+  --secondary:           #2c2c2e;
+  --secondary-foreground:#f4f4f5;
+  --muted:               #2c2c2e;
+  --muted-foreground:    #a1a1aa;
+  --accent:              #2c2c2e;
+  --accent-foreground:   #f4f4f5;
+  --destructive:         #ef4444;
+  --destructive-foreground: #ffffff;
+  --popover:             #1c1c1e;
+  --popover-foreground:  #f4f4f5;
+  --card:                #1c1c1e;
+  --card-foreground:     #f4f4f5;
+}
+
+/* Removed html.dark variables to allow other dark themes to work */
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+  body { @apply bg-background text-foreground; }
+}
+
+/* ── Custom scrollbar ───────────────────────── */
+.custom-scrollbar::-webkit-scrollbar { width: 10px; height: 10px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border: 2px solid var(--background);
+  border-radius: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
