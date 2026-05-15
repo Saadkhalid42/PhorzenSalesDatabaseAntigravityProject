@@ -12,10 +12,11 @@ import { Combobox } from '@/components/ui/combobox'
 
 interface CsvImportWizardProps {
   open: boolean
-  onClose: () => void
+  onOpenChange: (open: boolean) => void
 }
 
-export function CsvImportWizard({ open, onClose }: CsvImportWizardProps) {
+export function CsvImportWizard({ open, onOpenChange }: CsvImportWizardProps) {
+  const onClose = () => onOpenChange(false)
   const { addDatabase } = useStore()
   const [dbName, setDbName] = useState('New Database')
   const [file, setFile] = useState<File | null>(null)
@@ -121,7 +122,7 @@ export function CsvImportWizard({ open, onClose }: CsvImportWizardProps) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Import CSV Database</DialogTitle>

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type FilterOperator = 'contains' | 'is' | 'is not empty' | 'is empty'
+export type FilterOperator = 'contains' | 'is' | 'is not' | 'is not empty' | 'is empty'
 
 export interface FilterRule {
   id: string
@@ -79,6 +79,8 @@ export interface ViewConfig {
   alternateColoring?: boolean
   showTimeAndDate?: boolean
   rowHeight: number
+  columnSizing: Record<string, number>
+  fieldTypeOverrides: Record<string, string>
 }
 
 const DEFAULT_VIEW_CONFIG: ViewConfig = {
@@ -90,7 +92,9 @@ const DEFAULT_VIEW_CONFIG: ViewConfig = {
   searchQuery: '',
   alternateColoring: false,
   showTimeAndDate: false,
-  rowHeight: 36
+  rowHeight: 36,
+  columnSizing: {},
+  fieldTypeOverrides: {}
 }
 
 interface AppState {
@@ -131,6 +135,7 @@ interface AppState {
   deleteDashboardWidget: (viewId: string, widgetId: string) => void
   renameView: (id: string, name: string, icon?: string) => void
   deleteView: (id: string) => void
+  reorderDatabases: (from: number, to: number) => void
   reorderWorkspaces: (from: number, to: number) => void
   reorderViews: (from: number, to: number) => void
 
@@ -165,6 +170,16 @@ interface AppState {
 
   availableFields: string[]
   setAvailableFields: (fields: string[]) => void
+
+  uniqueValuesByColumn: Record<string, string[]>
+  setUniqueValuesByColumn: (map: Record<string, string[]>) => void
+
+  columnSizing: Record<string, number>
+  setColumnSizing: (sizing: Record<string, number>) => void
+
+  fieldTypeOverrides: Record<string, string>
+  setFieldTypeOverride: (column: string, type: string) => void
+  clearFieldTypeOverride: (column: string) => void
 
   searchQuery: string
   setSearchQuery: (query: string) => void
@@ -316,6 +331,12 @@ export const useStore = create<AppState>((set, get) => ({
   renameDatabase: (id, name) => set((state) => ({
     databases: state.databases.map(db => db.id === id ? { ...db, name } : db)
   })),
+  reorderDatabases: (from, to) => set((state) => {
+    const dbs = [...state.databases]
+    const [moved] = dbs.splice(from, 1)
+    dbs.splice(to, 0, moved)
+    return { databases: dbs }
+  }),
 
   deleteDatabase: (id) => set((state) => {
     const dbs = state.databases.filter(db => db.id !== id)
@@ -418,12 +439,24 @@ export const useStore = create<AppState>((set, get) => ({
   addView: (name, icon, type) => set((state) => {
     const newView: View = { id: `v-${Date.now()}`, name, icon, type: type || 'grid' }
     const newViews = [...state.views, newView]
+    
+    // Inherit config from current active view if it exists
+    const currentConfig = state.viewConfigs[state.activeViewId] || DEFAULT_VIEW_CONFIG
+    const newConfig = { 
+      ...DEFAULT_VIEW_CONFIG, 
+      columnOrder: [...currentConfig.columnOrder],
+      frozenColumns: [...currentConfig.frozenColumns],
+      hiddenColumns: [...currentConfig.hiddenColumns],
+      rowHeight: currentConfig.rowHeight,
+      columnSizing: { ...currentConfig.columnSizing }
+    }
+
     return { 
       views: newViews, 
       workspaceViews: { ...state.workspaceViews, [state.activeWorkspaceId]: newViews },
       activeViewId: newView.id,
-      viewConfigs: { ...state.viewConfigs, [newView.id]: DEFAULT_VIEW_CONFIG },
-      ...DEFAULT_VIEW_CONFIG
+      viewConfigs: { ...state.viewConfigs, [newView.id]: newConfig },
+      ...newConfig
     }
   }),
   renameView: (id, name, icon) => set((state) => {
@@ -545,6 +578,22 @@ export const useStore = create<AppState>((set, get) => ({
 
   availableFields: [],
   setAvailableFields: (fields) => set({ availableFields: fields }),
+
+  uniqueValuesByColumn: {},
+  setUniqueValuesByColumn: (map) => set({ uniqueValuesByColumn: map }),
+
+  columnSizing: {},
+  setColumnSizing: (sizing) => set({ columnSizing: sizing }),
+
+  fieldTypeOverrides: {},
+  setFieldTypeOverride: (column, type) => set((state) => ({
+    fieldTypeOverrides: { ...state.fieldTypeOverrides, [column]: type }
+  })),
+  clearFieldTypeOverride: (column) => set((state) => {
+    const next = { ...state.fieldTypeOverrides }
+    delete next[column]
+    return { fieldTypeOverrides: next }
+  }),
 
   searchQuery: '',
   setSearchQuery: (query) => set((state) => ({ 

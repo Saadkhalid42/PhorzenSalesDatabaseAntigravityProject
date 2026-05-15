@@ -85,7 +85,7 @@ function SortableWorkspaceItem({
   )
 }
 
-// ── Sortable view item ──────────────────────────────────────────────────────
+// ── SortableViewItem ──────────────────────────────────────────────────────
 function SortableViewItem({
   view,
   isActive,
@@ -136,7 +136,57 @@ function SortableViewItem({
   )
 }
 
-// ── Main Toolbar ────────────────────────────────────────────────────────────
+// ── SortableDatabaseItem ────────────────────────────────────────────────────
+function SortableDatabaseItem({
+  db,
+  isActive,
+  onSelect,
+  onEdit,
+  onDelete,
+  canDelete,
+}: {
+  db: { id: string; name: string }
+  isActive: boolean
+  onSelect: () => void
+  onEdit: () => void
+  onDelete: () => void
+  canDelete: boolean
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: db.id })
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn(
+        'flex items-center justify-between group px-2 py-1.5 rounded-md cursor-pointer select-none',
+        isActive ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
+      )}
+      onClick={onSelect}
+    >
+      <div className="flex items-center gap-2 flex-1 truncate">
+        <span
+          {...attributes}
+          {...listeners}
+          className="text-muted-foreground/40 hover:text-muted-foreground cursor-grab active:cursor-grabbing shrink-0"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <GripVertical className="w-3 h-3" />
+        </span>
+        <Database className="w-4 h-4 shrink-0 opacity-70" />
+        <span className="text-sm truncate">{db.name}</span>
+      </div>
+      <div className="hidden group-hover:flex items-center gap-1 opacity-70 shrink-0">
+        <button onClick={(e) => { e.stopPropagation(); onEdit() }} className="hover:text-primary p-0.5"><Edit2 className="w-3 h-3" /></button>
+        {canDelete && (
+          <button onClick={(e) => { e.stopPropagation(); onDelete() }} className="hover:text-destructive p-0.5"><Trash2 className="w-3 h-3" /></button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Sortable field item ───────────────────────────────────────────────────────
 function SortableFieldItem({ field, isHidden, onToggle }: { field: string, isHidden: boolean, onToggle: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: field })
@@ -194,10 +244,12 @@ export function Toolbar() {
     renameView,
     deleteView,
     reorderViews,
+    reorderDatabases,
     alternateColoring,
     setAlternateColoring,
     showTimeAndDate,
-    setShowTimeAndDate
+    setShowTimeAndDate,
+    incrementDataVersion
   } = useStore()
 
   const { theme, setTheme } = useTheme()
@@ -205,6 +257,7 @@ export function Toolbar() {
   const [activeHideFieldId, setActiveHideFieldId] = useState<string | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
+  const [menuSearch, setMenuSearch] = useState('')
 
   // Compute display fields based on columnOrder
   const displayFields = useMemo(() => {
@@ -212,6 +265,16 @@ export function Toolbar() {
     const missing = availableFields.filter(f => !columnOrder.includes(f))
     return [...ordered, ...missing]
   }, [columnOrder, availableFields])
+
+  const handleDbDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const fromIdx = databases.findIndex(db => db.id === active.id)
+    const toIdx = databases.findIndex(db => db.id === over.id)
+    if (fromIdx !== -1 && toIdx !== -1) {
+      reorderDatabases(fromIdx, toIdx)
+    }
+  }
 
   const handleHideFieldDragEnd = (event: DragEndEvent) => {
     setActiveHideFieldId(null)
@@ -239,6 +302,19 @@ export function Toolbar() {
   const activeDb = databases.find(db => db.id === activeDatabaseId)
   const activeWs = workspaces.find(w => w.id === activeWorkspaceId)
   const activeView = views.find(v => v.id === activeViewId)
+
+  const filteredDatabases = useMemo(() => 
+    databases.filter(db => db.name.toLowerCase().includes(menuSearch.toLowerCase())), 
+    [databases, menuSearch]
+  )
+  const filteredWorkspaces = useMemo(() => 
+    workspaces.filter(ws => ws.name.toLowerCase().includes(menuSearch.toLowerCase())), 
+    [workspaces, menuSearch]
+  )
+  const filteredViews = useMemo(() => 
+    views.filter(v => v.name.toLowerCase().includes(menuSearch.toLowerCase())), 
+    [views, menuSearch]
+  )
 
   const handleSaveDb = async () => {
     if (!dbDialog.name.trim()) return
@@ -329,27 +405,21 @@ export function Toolbar() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-64 p-2">
               <h4 className="text-xs font-semibold text-muted-foreground mb-2 px-2 uppercase tracking-wider">Databases</h4>
-              {databases.map(db => (
-                <div
-                  key={db.id}
-                  className={cn(
-                    'flex items-center justify-between group px-2 py-1.5 rounded-md cursor-pointer select-none',
-                    db.id === activeDatabaseId ? 'bg-primary/10 text-primary' : 'hover:bg-muted'
-                  )}
-                  onClick={() => setActiveDatabaseId(db.id)}
-                >
-                  <div className="flex items-center gap-2 flex-1 truncate">
-                    <Database className="w-4 h-4 shrink-0 opacity-70" />
-                    <span className="text-sm truncate">{db.name}</span>
-                  </div>
-                  <div className="hidden group-hover:flex items-center gap-1 opacity-70 shrink-0">
-                    <button onClick={(e) => { e.stopPropagation(); setDbDialog({ open: true, mode: 'edit', id: db.id, name: db.name }) }} className="hover:text-primary p-0.5"><Edit2 className="w-3 h-3" /></button>
-                    {databases.length > 1 && (
-                      <button onClick={(e) => { e.stopPropagation(); setEntityToDelete({ type: 'db', id: db.id, name: db.name }); setDeleteConfirmOpen(true); }} className="hover:text-destructive p-0.5"><Trash2 className="w-3 h-3" /></button>
-                    )}
-                  </div>
-                </div>
-              ))}
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDbDragEnd}>
+                <SortableContext items={databases.map(db => db.id)} strategy={verticalListSortingStrategy}>
+                  {databases.map(db => (
+                    <SortableDatabaseItem
+                      key={db.id}
+                      db={db}
+                      isActive={db.id === activeDatabaseId}
+                      onSelect={() => setActiveDatabaseId(db.id)}
+                      onEdit={() => setDbDialog({ open: true, mode: 'edit', id: db.id, name: db.name })}
+                      onDelete={() => { setEntityToDelete({ type: 'db', id: db.id, name: db.name }); setDeleteConfirmOpen(true); }}
+                      canDelete={databases.length > 1}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
               <div className="h-px bg-border my-1" />
               <div
                 className="flex items-center px-2 py-1.5 hover:bg-muted rounded-md cursor-pointer text-muted-foreground text-sm"
@@ -534,7 +604,6 @@ export function Toolbar() {
               <Palette className="w-5 h-5 md:w-4 md:h-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64 p-3 max-h-[80vh] overflow-y-auto">
-              {/* Theme content truncated for brevity in this replace call, will keep existing theme content */}
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">Themes</p>
               <div className="space-y-0.5">
                 {THEMES.map(t => (
@@ -593,6 +662,18 @@ export function Toolbar() {
             </Button>
           </div>
 
+          <div className="px-4 py-3 border-b border-border bg-muted/30">
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={menuSearch}
+                onChange={(e) => setMenuSearch(e.target.value)}
+                placeholder="Search menus..."
+                className="h-9 pl-9 text-sm bg-background border-border"
+              />
+            </div>
+          </div>
+
           <div className="flex-1 overflow-y-auto p-4 space-y-8">
             {/* Databases section */}
             <div className="space-y-3">
@@ -603,7 +684,7 @@ export function Toolbar() {
                 </Button>
               </div>
               <div className="space-y-1">
-                {databases.map(db => (
+                {filteredDatabases.map(db => (
                   <div
                     key={db.id}
                     onClick={() => { setActiveDatabaseId(db.id); setMobileMenuOpen(false); }}
@@ -630,7 +711,7 @@ export function Toolbar() {
                 </Button>
               </div>
               <div className="space-y-1">
-                {workspaces.map(ws => (
+                {filteredWorkspaces.map(ws => (
                   <div
                     key={ws.id}
                     onClick={() => { setActiveWorkspaceId(ws.id); setMobileMenuOpen(false); }}
@@ -655,7 +736,7 @@ export function Toolbar() {
                 </Button>
               </div>
               <div className="space-y-1">
-                {views.map(v => (
+                {filteredViews.map(v => (
                   <div
                     key={v.id}
                     onClick={() => { setActiveViewId(v.id); setMobileMenuOpen(false); }}
@@ -746,158 +827,132 @@ export function Toolbar() {
 
       <Popover open={rowHeightOpen} onOpenChange={setRowHeightOpen}>
         <PopoverTrigger className="absolute top-10 left-0 w-0 h-0 opacity-0 pointer-events-none" />
-        <PopoverContent className="w-[95vw] md:w-64 p-4 max-h-[80vh] overflow-y-auto" align="start">
-          <div className="font-medium text-sm mb-4">Row height ({rowHeight}px)</div>
-          <div className="pt-2 pb-2">
-            <Slider
-              value={[rowHeight]}
-              min={24}
-              max={120}
-              step={4}
-              onValueChange={(val) => setRowHeight(Array.isArray(val) ? val[0] : val as unknown as number)}
-            />
+        <PopoverContent className="w-64 p-4 flex flex-col gap-4" align="start">
+          <div className="flex items-center justify-between">
+            <div className="font-medium text-sm text-foreground">Row height</div>
+            <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-bold">{rowHeight}px</span>
+          </div>
+          <Slider
+            value={[rowHeight]}
+            min={24}
+            max={120}
+            step={4}
+            onValueChange={([val]) => setRowHeight(val)}
+          />
+          <div className="flex justify-between text-[10px] text-muted-foreground uppercase tracking-wider font-bold">
+            <span>Short</span>
+            <span>Tall</span>
           </div>
         </PopoverContent>
       </Popover>
 
-      {/* Workspace Dialog */}
-      <Dialog open={wsDialog.open} onOpenChange={(val) => !val && setWsDialog(s => ({ ...s, open: false }))}>
-        <DialogContent className="sm:max-w-[425px]">
+      {/* Shared Dialogs */}
+      <Dialog open={dbDialog.open} onOpenChange={(open) => setDbDialog(prev => ({ ...prev, open }))}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>{wsDialog.mode === 'create' ? 'New Workspace' : 'Edit Workspace'}</DialogTitle>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Name</label>
-              <Input
-                value={wsDialog.name}
-                onChange={e => setWsDialog(s => ({ ...s, name: e.target.value }))}
-                placeholder="Marketing Workspace"
-                onKeyDown={e => e.key === 'Enter' && handleSaveWorkspace()}
-                autoFocus
-              />
-            </div>
-            <div className="space-y-2 border-t border-border pt-4 mt-4">
-              <label className="text-sm font-medium">Choose Icon</label>
-              <IconPicker selected={wsDialog.icon as any} onSelect={(icon) => setWsDialog(s => ({ ...s, icon }))} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setWsDialog(s => ({ ...s, open: false }))}>Cancel</Button>
-            <Button onClick={handleSaveWorkspace}>Save</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* View Dialog */}
-      <Dialog open={viewDialog.open} onOpenChange={(val) => !val && setViewDialog(s => ({ ...s, open: false }))}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>{viewDialog.mode === 'create' ? 'New View' : 'Edit View'}</DialogTitle>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Name</label>
-              <Input
-                value={viewDialog.name}
-                onChange={e => setViewDialog(s => ({ ...s, name: e.target.value }))}
-                placeholder="All Candidates"
-                onKeyDown={e => e.key === 'Enter' && handleSaveView()}
-                autoFocus
-              />
-            </div>
-            <div className="space-y-2 border-t border-border pt-4 mt-4">
-              <label className="text-sm font-medium">Choose Icon</label>
-              <IconPicker selected={viewDialog.icon as any} onSelect={(icon) => setViewDialog(s => ({ ...s, icon }))} />
-            </div>
-            {viewDialog.mode === 'create' && (
-              <div className="space-y-2 border-t border-border pt-4 mt-4">
-                <label className="text-sm font-medium">View Type</label>
-                <div className="grid grid-cols-3 gap-2">
-                  <Button variant={viewDialog.type === 'grid' ? 'default' : 'outline'} className="flex-1" onClick={() => setViewDialog(s => ({ ...s, type: 'grid' }))}>Grid</Button>
-                  <Button variant={viewDialog.type === 'cards' ? 'default' : 'outline'} className="flex-1" onClick={() => setViewDialog(s => ({ ...s, type: 'cards' }))}>Stack Cards</Button>
-                  <Button variant={viewDialog.type === 'dashboard' ? 'default' : 'outline'} className="flex-1" onClick={() => setViewDialog(s => ({ ...s, type: 'dashboard' }))}>Dashboard</Button>
-                </div>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setViewDialog(s => ({ ...s, open: false }))}>Cancel</Button>
-            <Button onClick={handleSaveView}>Save</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={dbDialog.open} onOpenChange={(open) => setDbDialog(s => ({ ...s, open }))}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle>{dbDialog.mode === 'create' ? 'Create Database' : 'Edit Database'}</DialogTitle>
+            <DialogTitle>{dbDialog.mode === 'create' ? 'Create New Database' : 'Rename Database'}</DialogTitle>
           </DialogHeader>
           <div className="py-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Name</label>
-              <Input
-                value={dbDialog.name}
-                onChange={e => setDbDialog(s => ({ ...s, name: e.target.value }))}
-                placeholder="Sales Pipeline"
-                onKeyDown={e => e.key === 'Enter' && handleSaveDb()}
-                autoFocus
-              />
-            </div>
+            <Input
+              value={dbDialog.name}
+              onChange={(e) => setDbDialog(prev => ({ ...prev, name: e.target.value }))}
+              placeholder="Database name"
+              autoFocus
+            />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDbDialog(s => ({ ...s, open: false }))}>Cancel</Button>
+            <Button variant="outline" onClick={() => setDbDialog({ open: false, mode: 'create', name: '' })}>Cancel</Button>
             <Button onClick={handleSaveDb}>Save</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      <Dialog open={wsDialog.open} onOpenChange={(open) => setWsDialog(prev => ({ ...prev, open }))}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{wsDialog.mode === 'create' ? 'Create New Workspace' : 'Rename Workspace'}</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <Input
+              value={wsDialog.name}
+              onChange={(e) => setWsDialog(prev => ({ ...prev, name: e.target.value }))}
+              placeholder="Workspace name"
+              autoFocus
+            />
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Icon</label>
+              <IconPicker value={wsDialog.icon as IconName} onChange={(icon) => setWsDialog(prev => ({ ...prev, icon }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWsDialog({ open: false, mode: 'create', name: '' })}>Cancel</Button>
+            <Button onClick={handleSaveWorkspace}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-
-      <CsvImportWizard open={csvWizardOpen} onClose={() => setCsvWizardOpen(false)} />
+      <Dialog open={viewDialog.open} onOpenChange={(open) => setViewDialog(prev => ({ ...prev, open }))}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{viewDialog.mode === 'create' ? 'Create New View' : 'Rename View'}</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <Input
+              value={viewDialog.name}
+              onChange={(e) => setViewDialog(prev => ({ ...prev, name: e.target.value }))}
+              placeholder="View name"
+              autoFocus
+            />
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Icon</label>
+              <IconPicker value={viewDialog.icon as IconName} onChange={(icon) => setViewDialog(prev => ({ ...prev, icon }))} />
+            </div>
+            {viewDialog.mode === 'create' && (
+              <div className="space-y-2">
+                <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">View Type</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['grid', 'cards', 'dashboard'] as const).map(type => (
+                    <Button 
+                      key={type}
+                      variant={viewDialog.type === type ? 'default' : 'outline'}
+                      className="capitalize"
+                      onClick={() => setViewDialog(prev => ({ ...prev, type }))}
+                    >
+                      {type}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewDialog({ open: false, mode: 'create', name: '', type: 'grid' })}>Cancel</Button>
+            <Button onClick={handleSaveView}>Save</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <DialogContent className="max-w-sm" showCloseButton={false}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {entityToDelete?.type === 'db' ? 'Delete Database' :
-               entityToDelete?.type === 'ws' ? 'Delete Workspace' : 'Delete View'}
-            </DialogTitle>
+            <DialogTitle>Confirm Delete</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete <strong>{entityToDelete?.name}</strong>? This action cannot be undone.
+              Are you sure you want to delete {entityToDelete?.name}? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="mt-4">
+          <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>Cancel</Button>
             <Button variant="destructive" onClick={() => {
-              if (entityToDelete?.type === 'db') deleteDatabase(entityToDelete.id);
-              if (entityToDelete?.type === 'ws') deleteWorkspace(entityToDelete.id);
-              if (entityToDelete?.type === 'view') deleteView(entityToDelete.id);
-              setDeleteConfirmOpen(false);
+              if (entityToDelete?.type === 'db') deleteDatabase(entityToDelete.id)
+              if (entityToDelete?.type === 'ws') deleteWorkspace(entityToDelete.id)
+              if (entityToDelete?.type === 'view') deleteView(entityToDelete.id)
+              setDeleteConfirmOpen(false)
             }}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-
-      {/* View Pills Row */}
-      <div className="flex items-center px-4 py-2 gap-2 bg-muted/5 overflow-x-auto custom-scrollbar">
-        {views.map(view => (
-          <button
-            key={view.id}
-            onClick={() => setActiveViewId(view.id)}
-            className={cn(
-              "px-3 py-1 rounded-full text-xs font-medium transition-all duration-200 border whitespace-nowrap flex items-center gap-1.5",
-              activeViewId === view.id 
-                ? "bg-primary text-primary-foreground border-primary shadow-sm" 
-                : "bg-background text-muted-foreground border-border hover:bg-muted hover:text-foreground"
-            )}
-          >
-            {view.icon && <RenderIcon name={view.icon} className="w-3.5 h-3.5" />}
-            {view.name}
-          </button>
-        ))}
-      </div>
+      <CsvImportWizard open={csvWizardOpen} onOpenChange={setCsvWizardOpen} />
     </div>
   )
 }

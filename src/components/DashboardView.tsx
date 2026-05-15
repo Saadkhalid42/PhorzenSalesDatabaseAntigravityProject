@@ -180,13 +180,26 @@ export function DashboardView() {
     async function load() {
       const db = databases.find(d=>d.id===activeDatabaseId)
       if (!db) return
-      if (db.is_legacy !== false) {
-        const { data } = await (supabase.from('PhorzenSalesDatabase') as any).select('*').limit(5000)
-        setRows(data || [])
-      } else {
-        const res = await fetch(`/api/data?table_id=${activeDatabaseId}`)
-        const d = await res.json()
-        setRows((d.rows||[]).map((r:any)=>r.data_jsonb||r))
+      try {
+        if (db.is_legacy !== false) {
+          const { data } = await (supabase.from('PhorzenSalesDatabase') as any).select('*').limit(5000)
+          setRows(data || [])
+        } else {
+          const res = await fetch(`/api/data?table_id=${activeDatabaseId}`)
+          if (!res.ok) {
+            console.error('DashboardView: failed to fetch data', res.status, res.statusText)
+            return
+          }
+          const text = await res.text()
+          if (!text.trim()) {
+            console.warn('DashboardView: empty response body')
+            return
+          }
+          const d = JSON.parse(text)
+          setRows((d.rows||[]).map((r:any)=>r.data_jsonb||r))
+        }
+      } catch (err) {
+        console.error('DashboardView load error:', err)
       }
     }
     load()

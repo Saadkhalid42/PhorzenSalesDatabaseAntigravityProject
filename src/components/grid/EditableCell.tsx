@@ -1,12 +1,13 @@
 'use client'
 import * as React from 'react'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import { useStore } from '@/store/useStore'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
 import { format, parseISO, isValid } from 'date-fns'
+import { Check, ChevronDown, Plus, X } from 'lucide-react'
 
 interface EditableCellProps {
   initialValue: any
@@ -23,11 +24,22 @@ const formatValue = (val: any) => {
   return String(val)
 }
 
-const getColumnType = (col: string, val: any) => {
+const getColumnType = (col: string, val: any, overrides: Record<string, string>) => {
+  // Explicit override from the user takes highest priority
+  if (overrides[col]) return overrides[col]
+  
   const lower = col.toLowerCase()
   if (lower.includes('date')) return 'date'
   if (lower.includes('url') || lower.includes('link') || lower.includes('website')) return 'url'
-  if (lower.includes('status') || lower.includes('stage') || lower.includes('type')) return 'select'
+  if (
+    lower.includes('status') ||
+    lower.includes('stage') ||
+    lower.includes('type') ||
+    lower.includes('platform') ||
+    lower.includes('source') ||
+    lower.includes('category') ||
+    lower.includes('priority')
+  ) return 'select'
   if (lower.startsWith('is ') || lower.startsWith('has ') || typeof val === 'boolean') return 'boolean'
   if (lower.includes('amount') || lower.includes('revenue') || lower.includes('count') || typeof val === 'number') return 'number'
   return 'text'
@@ -44,16 +56,129 @@ const parseDateValue = (val: any): Date | undefined => {
   }
 }
 
+// Pill colors for select options
+const PILL_COLORS = [
+  'bg-blue-500/15 text-blue-600 border-blue-400/30 dark:text-blue-400',
+  'bg-green-500/15 text-green-700 border-green-400/30 dark:text-green-400',
+  'bg-amber-500/15 text-amber-700 border-amber-400/30 dark:text-amber-400',
+  'bg-purple-500/15 text-purple-700 border-purple-400/30 dark:text-purple-400',
+  'bg-rose-500/15 text-rose-700 border-rose-400/30 dark:text-rose-400',
+  'bg-cyan-500/15 text-cyan-700 border-cyan-400/30 dark:text-cyan-400',
+  'bg-orange-500/15 text-orange-700 border-orange-400/30 dark:text-orange-400',
+  'bg-indigo-500/15 text-indigo-700 border-indigo-400/30 dark:text-indigo-400',
+]
+
+function getPillColor(value: string) {
+  let hash = 0
+  for (let i = 0; i < value.length; i++) hash = value.charCodeAt(i) + ((hash << 5) - hash)
+  return PILL_COLORS[Math.abs(hash) % PILL_COLORS.length]
+}
+
+// ── In-App Select Dropdown ─────────────────────────────────────────────────
+function SelectDropdown({
+  currentValue,
+  uniqueValues,
+  onSelect,
+  onClose,
+}: {
+  currentValue: string
+  uniqueValues: string[]
+  onSelect: (val: string) => void
+  onClose: () => void
+}) {
+  const [search, setSearch] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+  
+  useEffect(() => {
+    setTimeout(() => inputRef.current?.focus(), 50)
+  }, [])
+  
+  const filtered = uniqueValues.filter(v => v.toLowerCase().includes(search.toLowerCase()))
+  const showCustom = search && !uniqueValues.some(v => v.toLowerCase() === search.toLowerCase())
+  
+  return (
+    <div className="flex flex-col w-56">
+      {/* Search */}
+      <div className="px-2 pt-2 pb-1 border-b border-border">
+        <div className="relative">
+          <input
+            ref={inputRef}
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search options..."
+            className="w-full h-7 bg-muted/50 rounded-md px-2 text-xs outline-none focus:ring-1 focus:ring-primary border border-border/50"
+            onKeyDown={e => {
+              if (e.key === 'Escape') onClose()
+              if (e.key === 'Enter' && showCustom) {
+                onSelect(search)
+                onClose()
+              }
+            }}
+          />
+        </div>
+      </div>
+      
+      {/* Options */}
+      <div className="max-h-48 overflow-y-auto py-1">
+        {/* Clear option */}
+        {currentValue && (
+          <button
+            className="w-full text-left px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted flex items-center gap-2 transition-colors"
+            onClick={() => { onSelect(''); onClose() }}
+          >
+            <X className="w-3 h-3" />
+            Clear
+          </button>
+        )}
+        
+        {filtered.length === 0 && !showCustom && (
+          <div className="px-3 py-3 text-xs text-muted-foreground text-center">No options found</div>
+        )}
+        
+        {filtered.map(v => (
+          <button
+            key={v}
+            className={cn(
+              "w-full text-left px-3 py-1.5 text-xs hover:bg-muted flex items-center gap-2 transition-colors group",
+              v === currentValue && "bg-primary/5"
+            )}
+            onClick={() => { onSelect(v); onClose() }}
+          >
+            <span className={cn(
+              "flex-1 px-1.5 py-0.5 rounded text-[11px] font-medium border truncate",
+              getPillColor(v)
+            )}>
+              {v}
+            </span>
+            {v === currentValue && <Check className="w-3 h-3 text-primary shrink-0" />}
+          </button>
+        ))}
+        
+        {showCustom && (
+          <button
+            className="w-full text-left px-3 py-1.5 text-xs hover:bg-muted flex items-center gap-2 transition-colors text-primary"
+            onClick={() => { onSelect(search); onClose() }}
+          >
+            <Plus className="w-3 h-3 shrink-0" />
+            <span>Use "<strong>{search}</strong>"</span>
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function EditableCell({ initialValue, rowId, columnId, onUpdate, uniqueValues = [], isFocused }: EditableCellProps) {
   const [lastInitialValue, setLastInitialValue] = useState(initialValue)
   const [currentValue, setCurrentValue] = useState(initialValue)
   const [value, setValue] = useState(formatValue(initialValue))
   const [isEditing, setIsEditing] = useState(false)
   const [isDateOpen, setIsDateOpen] = useState(false)
-  const { pushHistory } = useStore()
+  const [isSelectOpen, setIsSelectOpen] = useState(false)
+  const { pushHistory, fieldTypeOverrides } = useStore()
 
   const containerRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement | HTMLSelectElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (isFocused && !isEditing && containerRef.current) {
@@ -61,7 +186,7 @@ export function EditableCell({ initialValue, rowId, columnId, onUpdate, uniqueVa
     }
   }, [isFocused, isEditing])
 
-  const fieldType = getColumnType(columnId, currentValue)
+  const fieldType = getColumnType(columnId, currentValue, fieldTypeOverrides)
 
   if (initialValue !== lastInitialValue) {
     setLastInitialValue(initialValue)
@@ -69,7 +194,7 @@ export function EditableCell({ initialValue, rowId, columnId, onUpdate, uniqueVa
     setValue(formatValue(initialValue))
   }
 
-  const saveChange = async (newValue: any) => {
+  const saveChange = useCallback(async (newValue: any) => {
     if (String(newValue) !== String(currentValue)) {
       const previousValue = currentValue
       setCurrentValue(newValue)
@@ -112,12 +237,16 @@ export function EditableCell({ initialValue, rowId, columnId, onUpdate, uniqueVa
         setCurrentValue(previousValue)
       }
     }
-  }
+  }, [currentValue, columnId, rowId, pushHistory, onUpdate])
 
   const handleStartEdit = (replaceWith?: string) => {
     if (fieldType === 'boolean') return
     if (fieldType === 'date') {
       setIsDateOpen(true)
+      return
+    }
+    if (fieldType === 'select') {
+      setIsSelectOpen(true)
       return
     }
 
@@ -129,9 +258,7 @@ export function EditableCell({ initialValue, rowId, columnId, onUpdate, uniqueVa
     }
 
     setTimeout(() => {
-      if (inputRef.current) {
-        inputRef.current.focus()
-      }
+      if (inputRef.current) inputRef.current.focus()
     }, 0)
   }
 
@@ -141,7 +268,7 @@ export function EditableCell({ initialValue, rowId, columnId, onUpdate, uniqueVa
   }
 
   const onContainerKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (isEditing) return
+    if (isEditing || isSelectOpen) return
 
     if (e.key === 'Enter') {
       e.preventDefault()
@@ -157,7 +284,11 @@ export function EditableCell({ initialValue, rowId, columnId, onUpdate, uniqueVa
 
     if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
       e.preventDefault()
-      handleStartEdit(e.key)
+      if (fieldType === 'select') {
+        setIsSelectOpen(true)
+      } else {
+        handleStartEdit(e.key)
+      }
     }
   }
 
@@ -225,32 +356,54 @@ export function EditableCell({ initialValue, rowId, columnId, onUpdate, uniqueVa
     )
   }
 
-  // ── Editing state ──────────────────────────────────────────────────────────
-  if (isEditing) {
-    if (fieldType === 'select') {
-      return (
-        <select
-          ref={inputRef as React.RefObject<HTMLSelectElement>}
-          className="w-full h-full bg-background outline-none border border-primary text-sm px-1 font-sans rounded-sm z-50 relative"
-          value={value}
-          onChange={e => setValue(e.target.value)}
-          onBlur={onBlurEdit}
-          onKeyDown={onInputKeyDown}
+  // ── Select Cell (In-App Popover) ─────────────────────────────────────────
+  if (fieldType === 'select') {
+    const displayVal = formatValue(currentValue)
+    return (
+      <Popover open={isSelectOpen} onOpenChange={setIsSelectOpen}>
+        <PopoverTrigger
+          ref={containerRef as any}
+          tabIndex={-1}
+          className="w-full h-full flex items-center px-1 gap-1 cursor-pointer text-sm font-sans relative group outline-none"
+          onKeyDown={onContainerKeyDown as any}
         >
-          <option value="">-- Select --</option>
-          {uniqueValues.map(v => (
-            <option key={v} value={v}>{v}</option>
-          ))}
-          {!uniqueValues.includes(value) && value !== '' && (
-            <option value={value}>{value}</option>
+          {displayVal ? (
+            <span className={cn(
+              "flex-1 px-1.5 py-0.5 rounded text-[11px] font-medium border truncate",
+              getPillColor(displayVal)
+            )}>
+              {displayVal}
+            </span>
+          ) : (
+            <span className="flex-1 text-muted-foreground/30 font-light">-</span>
           )}
-        </select>
-      )
-    }
+          <ChevronDown className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 transition-colors" />
+        </PopoverTrigger>
+        <PopoverContent
+          className="p-0 w-auto shadow-xl border border-border/60 rounded-xl overflow-hidden"
+          align="start"
+          sideOffset={4}
+          onOpenAutoFocus={e => e.preventDefault()}
+        >
+          <SelectDropdown
+            currentValue={displayVal}
+            uniqueValues={uniqueValues}
+            onSelect={val => {
+              setCurrentValue(val)
+              saveChange(val)
+            }}
+            onClose={() => setIsSelectOpen(false)}
+          />
+        </PopoverContent>
+      </Popover>
+    )
+  }
 
+  // ── Editing state (text/number) ────────────────────────────────────────────
+  if (isEditing) {
     return (
       <input
-        ref={inputRef as React.RefObject<HTMLInputElement>}
+        ref={inputRef}
         type={fieldType === 'number' ? 'number' : 'text'}
         className="w-full h-full bg-background outline-none border border-primary text-sm px-1 font-sans shadow-sm z-50 relative min-w-[120px]"
         value={value}
@@ -290,12 +443,6 @@ export function EditableCell({ initialValue, rowId, columnId, onUpdate, uniqueVa
         <span className="text-muted-foreground/30 font-light">-</span>
       ) : (
         <span className="truncate">{displayVal}</span>
-      )}
-
-      {fieldType === 'select' && displayVal && (
-        <div className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 bg-muted/50 text-[10px] px-1 rounded text-muted-foreground pointer-events-none">
-          ▾
-        </div>
       )}
     </div>
   )

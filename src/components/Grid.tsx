@@ -49,7 +49,8 @@ const MemoizedGridCell = React.memo(({
   handleCellMouseDown,
   handleCellMouseEnter,
   alternateColoring,
-  pinnedOffset
+  pinnedOffset,
+  dataVersion
 }: {
   cell: any
   virtualRowIndex: number
@@ -60,6 +61,7 @@ const MemoizedGridCell = React.memo(({
   handleCellMouseEnter: (r: number, c: number) => void
   alternateColoring?: boolean
   pinnedOffset: number
+  dataVersion: number
 }) => {
   return (
     <div
@@ -113,7 +115,11 @@ export function Grid() {
     popUndo,
     popRedo,
     alternateColoring,
-    showTimeAndDate
+    showTimeAndDate,
+    setUniqueValuesByColumn,
+    uniqueValuesByColumn: storeUniqueValues,
+    columnSizing,
+    setColumnSizing
   } = useStore()
 
   const [rowsData, setRowsData] = useState<any[]>([])
@@ -207,6 +213,9 @@ export function Grid() {
               case 'is':
                 query = query.eq(f.field, f.value)
                 break
+              case 'is not':
+                query = query.neq(f.field, f.value)
+                break
               case 'is not empty':
                 query = (query as any).not(f.field, 'is', null).neq(f.field, '')
                 break
@@ -261,6 +270,7 @@ export function Grid() {
               switch (f.operator) {
                 case 'contains': return val.includes(search)
                 case 'is': return val === search
+                case 'is not': return val !== search
                 case 'is not empty': return val !== ''
                 case 'is empty': return val === ''
                 default: return true
@@ -297,6 +307,31 @@ export function Grid() {
     fetchData()
   }, [activeViewId, filters, sorts, dataVersion, setAvailableFields])
 
+  // Extract unique values for potential select fields
+  const uniqueValuesByColumn = useMemo(() => {
+    const map: Record<string, string[]> = {}
+    if (rowsData.length === 0) return map
+    
+    const allKeys = Object.keys(rowsData[0])
+    allKeys.forEach(col => {
+      const set = new Set<string>()
+      rowsData.forEach(row => {
+        if (row[col] !== null && row[col] !== undefined && row[col] !== '') {
+          set.add(String(row[col]))
+        }
+      })
+      if (set.size > 0 && set.size < 100) { 
+        map[col] = Array.from(set).sort()
+      }
+    })
+    return map
+  }, [rowsData])
+
+  // Sync to store for FilterBuilder
+  useEffect(() => {
+    setUniqueValuesByColumn(uniqueValuesByColumn)
+  }, [uniqueValuesByColumn, setUniqueValuesByColumn])
+
   // Dynamically generate columns based on the keys of the first row
   const columns: ColumnDef<DynamicRowData>[] = useMemo(() => {
     if (rowsData.length === 0) return []
@@ -319,19 +354,6 @@ export function Grid() {
             isFrozen={column.getIsPinned() === 'left'}
             onFreeze={() => toggleFrozenColumn(key)} 
           />
-          <div
-            onMouseDown={header.getResizeHandler()}
-            onTouchStart={header.getResizeHandler()}
-            className={cn(
-              "absolute right-0 top-0 h-full w-[6px] cursor-col-resize select-none touch-none z-50 flex items-center justify-end group/resize pr-[1px]",
-              column.getIsResizing() ? "opacity-100" : "opacity-0 hover:opacity-100"
-            )}
-          >
-            <div className={cn(
-              "w-[2px] h-full transition-colors",
-              column.getIsResizing() ? "bg-primary" : "bg-primary/60 group-hover/resize:bg-primary"
-            )} />
-          </div>
         </div>
       ),
       size: key.toLowerCase().includes('id') ? 100 : key.toLowerCase().includes('email') ? 250 : 150,
@@ -341,7 +363,7 @@ export function Grid() {
         return <EditableCell initialValue={info.getValue()} rowId={rowId} columnId={key} uniqueValues={uniqueValuesByColumn[key] || []} />
       }
     }))
-  }, [rowsData])
+  }, [rowsData, uniqueValuesByColumn])
   
   // Initialize column order if empty
   useEffect(() => {
@@ -349,27 +371,6 @@ export function Grid() {
       setColumnOrder(columns.map(c => c.id as string))
     }
   }, [columns.length, columnOrder.length, setColumnOrder, columns])
-
-  // Extract unique values for potential select fields
-  const uniqueValuesByColumn = useMemo(() => {
-    const map: Record<string, string[]> = {}
-    if (rowsData.length === 0) return map
-    
-    // Check columns that might be selects
-    const columnsToCheck = Object.keys(rowsData[0]).filter(k => {
-      const lower = k.toLowerCase()
-      return lower.includes('status') || lower.includes('stage') || lower.includes('type')
-    })
-
-    columnsToCheck.forEach(col => {
-      const set = new Set<string>()
-      rowsData.forEach(row => {
-        if (row[col]) set.add(String(row[col]))
-      })
-      map[col] = Array.from(set)
-    })
-    return map
-  }, [rowsData])
 
   // Local instant search filter
   const filteredRowsData = useMemo(() => {
@@ -401,6 +402,12 @@ export function Grid() {
       columnPinning: { left: frozenColumns },
       columnVisibility,
       columnOrder: columnOrder.length > 0 ? columnOrder : undefined,
+      columnSizing,
+    },
+    onColumnSizingChange: (updater) => {
+      const newSizing = typeof updater === 'function' ? updater(columnSizing) : updater
+      setColumnSizing(newSizing)
+      incrementDataVersion()
     },
     onColumnOrderChange: (updater) => {
       setColumnOrder(typeof updater === 'function' ? updater(columnOrder) : updater)
@@ -483,12 +490,29 @@ export function Grid() {
         ref={setNodeRef}
         style={style}
         className={cn(
-          "flex items-center px-3 border-r border-border bg-muted/80 relative",
-          header.column.getIsPinned() === 'left' ? "sticky shadow-[1px_0_0_0_var(--border)]" : ""
+          "flex items-center px-3 border-r border-border relative",
+          header.column.getIsPinned() === 'left'
+            ? "sticky bg-muted shadow-[2px_0_4px_-1px_rgba(0,0,0,0.12)] dark:shadow-[2px_0_4px_-1px_rgba(0,0,0,0.4)] z-50"
+            : "bg-muted/80"
         )}
       >
         <div {...attributes} {...listeners} className="flex-1 truncate cursor-grab active:cursor-grabbing mr-2 h-full flex items-center pt-[1px]">
           {flexRender(header.column.columnDef.header, header.getContext())}
+        </div>
+        
+        {/* Resize Handle at the far right of the cell box */}
+        <div
+          onMouseDown={header.getResizeHandler()}
+          onTouchStart={header.getResizeHandler()}
+          className={cn(
+            "absolute right-0 top-0 h-full w-2 cursor-col-resize select-none touch-none z-50 flex items-center justify-center group/resize",
+            header.column.getIsResizing() ? "opacity-100" : "opacity-0 hover:opacity-100"
+          )}
+        >
+          <div className={cn(
+            "w-[1.5px] h-full transition-colors",
+            header.column.getIsResizing() ? "bg-primary" : "bg-primary/40 group-hover/resize:bg-primary"
+          )} />
         </div>
       </div>
     )
@@ -861,6 +885,7 @@ export function Grid() {
                       handleCellMouseEnter={handleCellMouseEnter}
                       alternateColoring={alternateColoring}
                       pinnedOffset={pinnedOffset}
+                      dataVersion={dataVersion}
                     />
                   )
                 })}

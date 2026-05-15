@@ -26,7 +26,7 @@ interface ColumnHeaderMenuProps {
 }
 
 export function ColumnHeaderMenu({ columnName, onFreeze, isFrozen }: ColumnHeaderMenuProps) {
-  const { incrementDataVersion } = useStore()
+  const { incrementDataVersion, setFieldTypeOverride } = useStore()
   const [isPending, startTransition] = React.useTransition()
 
   const [isRenameDialogOpen, setIsRenameDialogOpen] = React.useState(false)
@@ -79,6 +79,24 @@ export function ColumnHeaderMenu({ columnName, onFreeze, isFrozen }: ColumnHeade
   }
 
   const handleChangeType = (type: string) => {
+    // Map UI type names to our internal field type identifiers
+    const internalTypeMap: Record<string, string> = {
+      'Single line text': 'text',
+      'Long text': 'longtext',
+      'Number': 'number',
+      'Boolean': 'boolean',
+      'Date': 'date',
+      'Email': 'url',
+      'URL': 'url',
+      'Phone number': 'text',
+      'Single select': 'select',
+      'Multiple select': 'select',
+      'Rating': 'number',
+    }
+    const internalType = internalTypeMap[type]
+    if (internalType) {
+      setFieldTypeOverride(columnName, internalType)
+    }
     handleServerAction(changeColumnType(columnName, type))
   }
 
