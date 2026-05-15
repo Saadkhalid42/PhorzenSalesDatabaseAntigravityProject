@@ -1,15 +1,22 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+function checkEnv() {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+    throw new Error('Missing Supabase environment variables (NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY). Please add them to your Vercel project settings.')
+  }
+}
 
 // The unique ID of the system table created to hold the app state
 const APP_STATE_TABLE_ID = 'fe3c268d-5d15-469e-91e3-d21553712b2c'
 
 export async function GET() {
   try {
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    checkEnv()
+    const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_KEY!)
     
     const { data, error } = await supabase
       .from('tables')
@@ -34,6 +41,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    checkEnv()
     const body = await request.json()
     const { state } = body
 
@@ -41,7 +49,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No state provided' }, { status: 400 })
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_KEY!)
     
     const { error } = await supabase
       .from('tables')

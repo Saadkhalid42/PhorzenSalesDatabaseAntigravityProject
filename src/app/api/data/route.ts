@@ -1,15 +1,22 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+function checkEnv() {
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+    throw new Error('Missing Supabase environment variables (NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY). Please add them to your Vercel project settings.')
+  }
+}
 
 export async function POST(request: Request) {
   try {
+    checkEnv()
     const body = await request.json()
     const { action, table_id, rows, updates, deletes, query } = body
     
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    const supabase = createClient(SUPABASE_URL!, SUPABASE_SERVICE_KEY!)
     
     if (action === 'query') {
       let sbQuery = supabase.from('rows').select('*').eq('table_id', table_id)
