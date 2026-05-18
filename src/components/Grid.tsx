@@ -156,10 +156,11 @@ export function Grid() {
             .update({ [columnId]: newValue })
             .eq('id', rowId)
         } else {
-          const rowObj = rowsData.find(r => String(r.id) === String(rowId))
+          const rowObj = rowsData.find(r => String(r._db_uuid || r.id) === String(rowId))
           if (!rowObj) return
           const oldDataJsonb = { ...rowObj }
           delete oldDataJsonb.id
+          delete oldDataJsonb._db_uuid
           const newDataJsonb = {
             ...oldDataJsonb,
             [columnId]: newValue
@@ -204,7 +205,7 @@ export function Grid() {
           
           for (const update of action.updates) {
             const { rowId, columnId, oldValue } = update
-            setRowsData(prev => prev.map(r => String(r.id) === String(rowId) ? { ...r, [columnId]: oldValue } : r))
+            setRowsData(prev => prev.map(r => String(r._db_uuid || r.id) === String(rowId) ? { ...r, [columnId]: oldValue } : r))
             await saveCellToDatabase(rowId, columnId, oldValue)
           }
           incrementDataVersion()
@@ -218,7 +219,7 @@ export function Grid() {
           
           for (const update of action.updates) {
             const { rowId, columnId, newValue } = update
-            setRowsData(prev => prev.map(r => String(r.id) === String(rowId) ? { ...r, [columnId]: newValue } : r))
+            setRowsData(prev => prev.map(r => String(r._db_uuid || r.id) === String(rowId) ? { ...r, [columnId]: newValue } : r))
             await saveCellToDatabase(rowId, columnId, newValue)
           }
           incrementDataVersion()
@@ -677,13 +678,12 @@ export function Grid() {
     let numericCellsCount = 0
     
     const currentRows = table.getRowModel().rows
-    const visibleHeaders = table.getFlatHeaders().map(h => h.id)
     
     currentRows.forEach((row, rowIndex) => {
-      visibleHeaders.forEach((header, colIndex) => {
+      row.getVisibleCells().forEach((cell, colIndex) => {
         if (isCellSelected(rowIndex, colIndex)) {
           totalCellsCount++
-          const rawValue = row.original[header]
+          const rawValue = cell.getValue()
           if (rawValue !== null && rawValue !== undefined && rawValue !== '') {
             const cleaned = String(rawValue).replace(/[$,]/g, '').trim()
             if (cleaned !== '') {
@@ -698,7 +698,7 @@ export function Grid() {
       })
     })
     
-    if (numericCellsCount === 0) return null
+    if (totalCellsCount <= 1 || numericCellsCount === 0) return null
     
     const sum = numericValues.reduce((a, b) => a + b, 0)
     const avg = sum / numericCellsCount
@@ -713,7 +713,7 @@ export function Grid() {
       count: totalCellsCount,
       numericCount: numericCellsCount
     }
-  }, [selection, multiCells, table, isCellSelected])
+  }, [selection, multiCells, table, isCellSelected, rowsData])
 
   if (isLoading) {
     return (
@@ -811,7 +811,7 @@ export function Grid() {
       if (updatesList.length > 0) {
         // Update local state rowsData immediately
         setRowsData(prev => prev.map(row => {
-          const match = updatesList.filter(u => String(u.rowId) === String(row.id))
+          const match = updatesList.filter(u => String(u.rowId) === String(row._db_uuid || row.id))
           if (match.length > 0) {
             const updatedRow = { ...row }
             match.forEach(m => {
