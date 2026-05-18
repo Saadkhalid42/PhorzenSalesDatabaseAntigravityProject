@@ -249,11 +249,11 @@ export function EditableCell({ initialValue, rowId, columnId, onUpdate, uniqueVa
               }
             })
           })
+          const json = await res.json().catch(() => null)
           if (!res.ok) {
-            error = new Error('Failed to update dynamic database row')
-          } else {
-            const json = await res.json()
-            if (json.error) error = new Error(json.error)
+            error = new Error(json?.error || 'Failed to update dynamic database row')
+          } else if (json && json.error) {
+            error = new Error(json.error)
           }
         }
 

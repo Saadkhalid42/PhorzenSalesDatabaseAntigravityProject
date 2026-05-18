@@ -78,8 +78,9 @@ export function CardsView() {
           if (error) throw new Error(error)
 
           let rows = (data || []).map((r: any) => ({
-            id: r.id,
-            ...r.data_jsonb
+            ...r.data_jsonb,
+            _db_uuid: r.id,
+            id: r.data_jsonb?.id || r.id
           }))
 
           for (const f of filters) {

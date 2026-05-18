@@ -350,8 +350,9 @@ export function Grid() {
           if (error) throw new Error(error)
 
           let rows = (data || []).map((r: any) => ({
-            id: r.id,
-            ...r.data_jsonb
+            ...r.data_jsonb,
+            _db_uuid: r.id,
+            id: r.data_jsonb?.id || r.id
           }))
 
           // Apply filters locally
@@ -463,7 +464,7 @@ export function Grid() {
       size: key.toLowerCase().includes('id') ? 100 : key.toLowerCase().includes('email') ? 250 : 150,
       cell: info => {
         // Fallback row id logic
-        const rowId = info.row.original.id || info.row.original['Lead ID'] || info.row.original.lead_id
+        const rowId = info.row.original._db_uuid || info.row.original.id || info.row.original['Lead ID'] || info.row.original.lead_id
         return <EditableCell initialValue={info.getValue()} rowId={rowId} columnId={key} uniqueValues={uniqueValuesByColumn[key] || []} rowObj={info.row.original} />
       }
     }))
@@ -788,7 +789,7 @@ export function Grid() {
       for (let r = minRow; r <= maxRow; r++) {
         const row = rows[r]
         if (!row) continue
-        const rowId = row.original.id || row.original['Lead ID'] || row.original.lead_id
+        const rowId = row.original._db_uuid || row.original.id || row.original['Lead ID'] || row.original.lead_id
         
         for (let c = minCol; c <= maxCol; c++) {
           if (isCellSelected(r, c)) {
@@ -937,12 +938,12 @@ export function Grid() {
       if (targetRowIndex >= rows.length) break
       
       const row = rows[targetRowIndex]
-      const rowId = row.original.id || row.original['Lead ID'] || row.original.lead_id
+      const rowId = row.original._db_uuid || row.original.id || row.original['Lead ID'] || row.original.lead_id
       if (!rowId) continue
       
       const updatePayload: any = {}
       let hasUpdates = false
-      const rowIdKey = row.original.id ? 'id' : (row.original['Lead ID'] ? 'Lead ID' : 'lead_id')
+      const rowIdKey = row.original._db_uuid ? 'id' : (row.original.id ? 'id' : (row.original['Lead ID'] ? 'Lead ID' : 'lead_id'))
       
       for (let c = 0; c < parsedRows[r].length; c++) {
         const targetColIndex = minCol + c
