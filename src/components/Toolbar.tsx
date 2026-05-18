@@ -909,7 +909,7 @@ export function Toolbar() {
 
       {/* Shared Dialogs */}
       <Dialog open={dbDialog.open} onOpenChange={(open) => setDbDialog(prev => ({ ...prev, open }))}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{dbDialog.mode === 'create' ? 'Create New Database' : 'Rename Database'}</DialogTitle>
           </DialogHeader>
@@ -929,7 +929,7 @@ export function Toolbar() {
       </Dialog>
 
       <Dialog open={wsDialog.open} onOpenChange={(open) => setWsDialog(prev => ({ ...prev, open }))}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{wsDialog.mode === 'create' ? 'Create New Workspace' : 'Rename Workspace'}</DialogTitle>
           </DialogHeader>
@@ -953,7 +953,7 @@ export function Toolbar() {
       </Dialog>
 
       <Dialog open={viewDialog.open} onOpenChange={(open) => setViewDialog(prev => ({ ...prev, open }))}>
-        <DialogContent className="sm:max-w-[300px]">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{viewDialog.mode === 'create' ? 'Create New View' : 'Rename View'}</DialogTitle>
           </DialogHeader>
@@ -994,7 +994,7 @@ export function Toolbar() {
       </Dialog>
 
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Confirm Delete</DialogTitle>
             <DialogDescription>
