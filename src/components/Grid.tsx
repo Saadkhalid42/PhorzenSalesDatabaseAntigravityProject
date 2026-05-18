@@ -660,14 +660,6 @@ export function Grid() {
     })
   }, [])
 
-  if (isLoading) {
-    return (
-      <div className="flex-1 flex items-center justify-center bg-background text-muted-foreground">
-        Loading workspace...
-      </div>
-    )
-  }
-
   const isCellSelected = (rowIndex: number, colIndex: number) => {
     if (multiCells.has(`${rowIndex}-${colIndex}`)) return true
     if (!selection) return false
@@ -721,6 +713,14 @@ export function Grid() {
       numericCount: numericCellsCount
     }
   }, [selection, multiCells, table, isCellSelected])
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-background text-muted-foreground">
+        Loading workspace...
+      </div>
+    )
+  }
 
   const isCellFocused = (rowIndex: number, colIndex: number) => {
     if (!selection) return false
