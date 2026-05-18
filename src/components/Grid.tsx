@@ -698,7 +698,18 @@ export function Grid() {
       })
     })
     
-    if (totalCellsCount <= 1 || numericCellsCount === 0) return null
+    if (totalCellsCount <= 1) return null
+
+    if (numericCellsCount === 0) {
+      return {
+        sum: 0,
+        avg: 0,
+        min: 0,
+        max: 0,
+        count: totalCellsCount,
+        numericCount: 0
+      }
+    }
     
     const sum = numericValues.reduce((a, b) => a + b, 0)
     const avg = sum / numericCellsCount
@@ -1206,47 +1217,63 @@ export function Grid() {
       </Dialog>
 
       {/* Floating Selected Cells Summary Panel */}
-      {selectedCellsStats && selectedCellsStats.numericCount > 0 && (
+      {selectedCellsStats && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-4 px-4 py-2.5 bg-background/95 backdrop-blur-md border border-border/80 shadow-2xl rounded-2xl animate-in fade-in slide-in-from-bottom-4 duration-300 hover:scale-[1.02] transition-all select-none">
-          <div className="flex items-center gap-2 border-r border-border/50 pr-4">
-            <div className="p-1.5 bg-primary/10 rounded-lg text-primary">
-              <Sigma className="w-4 h-4" />
-            </div>
-            <div className="flex flex-col">
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Sum</span>
-              <span className="text-sm font-bold text-foreground">
-                {selectedCellsStats.sum.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-              </span>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-4 text-xs font-medium text-muted-foreground">
-            <div className="flex flex-col">
-              <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60 font-semibold">Average</span>
-              <span className="text-foreground font-semibold">
-                {selectedCellsStats.avg.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-              </span>
-            </div>
-            
-            <div className="flex flex-col">
-              <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60 font-semibold">Count</span>
-              <span className="text-foreground font-semibold">{selectedCellsStats.numericCount}</span>
-            </div>
+          {selectedCellsStats.numericCount > 0 ? (
+            <>
+              <div className="flex items-center gap-2 border-r border-border/50 pr-4">
+                <div className="p-1.5 bg-primary/10 rounded-lg text-primary">
+                  <Sigma className="w-4 h-4" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Sum</span>
+                  <span className="text-sm font-bold text-foreground">
+                    {selectedCellsStats.sum.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+              
+              <div className="flex items-center gap-4 text-xs font-medium text-muted-foreground">
+                <div className="flex flex-col">
+                  <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60 font-semibold">Average</span>
+                  <span className="text-foreground font-semibold">
+                    {selectedCellsStats.avg.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+                
+                <div className="flex flex-col">
+                  <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60 font-semibold">Count</span>
+                  <span className="text-foreground font-semibold">{selectedCellsStats.numericCount}</span>
+                </div>
 
-            <div className="flex flex-col">
-              <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60 font-semibold">Min</span>
-              <span className="text-foreground font-semibold">
-                {selectedCellsStats.min.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-              </span>
-            </div>
+                <div className="flex flex-col">
+                  <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60 font-semibold">Min</span>
+                  <span className="text-foreground font-semibold">
+                    {selectedCellsStats.min.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
 
-            <div className="flex flex-col">
-              <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60 font-semibold">Max</span>
-              <span className="text-foreground font-semibold">
-                {selectedCellsStats.max.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-              </span>
+                <div className="flex flex-col">
+                  <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60 font-semibold">Max</span>
+                  <span className="text-foreground font-semibold">
+                    {selectedCellsStats.max.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-primary/10 rounded-lg text-primary">
+                <Sigma className="w-4 h-4" />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Count</span>
+                <span className="text-sm font-bold text-foreground">
+                  {selectedCellsStats.count}
+                </span>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 
