@@ -193,7 +193,7 @@ export function EditableCell({ initialValue, rowId, columnId, onUpdate, uniqueVa
   const [isEditing, setIsEditing] = useState(false)
   const [isDateOpen, setIsDateOpen] = useState(false)
   const [isSelectOpen, setIsSelectOpen] = useState(false)
-  const { pushHistory, fieldTypeOverrides, databases, activeDatabaseId, customSelectOptions } = useStore()
+  const { pushHistory, fieldTypeOverrides, databases, activeDatabaseId, customSelectOptions, uniqueValuesByColumn } = useStore()
 
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -438,7 +438,7 @@ export function EditableCell({ initialValue, rowId, columnId, onUpdate, uniqueVa
         >
           <SelectDropdown
             currentValue={displayVal}
-            uniqueValues={customSelectOptions[columnId] || uniqueValues}
+            uniqueValues={customSelectOptions[columnId] || uniqueValuesByColumn[columnId] || uniqueValues}
             onSelect={val => {
               setCurrentValue(val)
               saveChange(val)

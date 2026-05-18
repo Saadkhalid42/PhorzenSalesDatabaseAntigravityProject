@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import { Filter, ArrowUpDown, EyeOff, LayoutTemplate, Search, GripVertical } from 'lucide-react'
 import { FilterBuilder } from '@/components/grid/FilterBuilder'
 import { SortBuilder } from '@/components/grid/SortBuilder'
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Input } from '@/components/ui/input'
@@ -286,6 +286,23 @@ export function Toolbar() {
       setColumnOrder(arrayMove(displayFields, fromIdx, toIdx))
     }
   }
+
+  // Shortcut to open search (Cmd+F / Ctrl+F)
+  useEffect(() => {
+    const handleSearchShortcut = (e: KeyboardEvent) => {
+      const isCmdF = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f'
+      if (isCmdF) {
+        e.preventDefault()
+        const input = document.getElementById('global-search-input') as HTMLInputElement | null
+        if (input) {
+          input.focus()
+          input.select()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleSearchShortcut)
+    return () => window.removeEventListener('keydown', handleSearchShortcut)
+  }, [])
 
   // Dialog States
   const [dbDialog, setDbDialog] = useState<{ open: boolean; mode: 'create' | 'edit'; id?: string; name: string }>({ open: false, mode: 'create', name: '' })
@@ -579,7 +596,8 @@ export function Toolbar() {
           {/* Desktop Search */}
           <div className="hidden md:flex relative group/search">
             <Search className="w-4 h-4 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within/search:text-primary transition-colors" />
-            <Input
+             <Input
+              id="global-search-input"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search..."
@@ -634,6 +652,37 @@ export function Toolbar() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+      </div>
+
+      {/* Saved Views Pills Bar */}
+      <div className="flex items-center gap-1.5 px-4 py-1.5 bg-muted/10 border-b border-border/60 overflow-x-auto scrollbar-none select-none">
+        {views.map((v) => {
+          const isActive = v.id === activeViewId
+          return (
+            <button
+              key={v.id}
+              onClick={() => setActiveViewId(v.id)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border transition-all duration-200 shrink-0 shadow-sm",
+                isActive
+                  ? "bg-primary text-primary-foreground border-primary shadow-primary/10"
+                  : "bg-background text-muted-foreground border-border/80 hover:text-foreground hover:bg-muted/40"
+              )}
+            >
+              <RenderIcon name={v.icon} className="w-3.5 h-3.5" />
+              <span>{v.name}</span>
+            </button>
+          )
+        })}
+        
+        {/* Create new view shortcut pill */}
+        <button
+          onClick={() => setViewDialog({ open: true, mode: 'create', name: '', type: 'grid' })}
+          className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium border border-dashed border-border/80 text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-primary/5 transition-all shrink-0"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>New view</span>
+        </button>
       </div>
 
       {/* Mobile Search Bar - Expands below main header */}
@@ -904,7 +953,7 @@ export function Toolbar() {
       </Dialog>
 
       <Dialog open={viewDialog.open} onOpenChange={(open) => setViewDialog(prev => ({ ...prev, open }))}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[300px]">
           <DialogHeader>
             <DialogTitle>{viewDialog.mode === 'create' ? 'Create New View' : 'Rename View'}</DialogTitle>
           </DialogHeader>

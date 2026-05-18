@@ -32,7 +32,7 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 
 import { cn } from '@/lib/utils'
-import { Maximize2, Plus, MoreHorizontal, Copy, Trash2, ClipboardType } from 'lucide-react'
+import { Maximize2, Plus, MoreHorizontal, Copy, Trash2, ClipboardType, Sigma } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
@@ -143,6 +143,92 @@ export function Grid() {
     window.addEventListener('mouseup', handleMouseUp)
     return () => window.removeEventListener('mouseup', handleMouseUp)
   }, [])
+
+  // Undo/Redo keyboard event listener
+  useEffect(() => {
+    const saveCellToDatabase = async (rowId: string, columnId: string, newValue: any) => {
+      try {
+        const activeDatabase = databases.find(db => db.id === activeDatabaseId)
+        const isLegacy = activeDatabase?.is_legacy !== false
+        
+        if (isLegacy) {
+          await (supabase.from('PhorzenSalesDatabase') as any)
+            .update({ [columnId]: newValue })
+            .eq('id', rowId)
+        } else {
+          const rowObj = rowsData.find(r => String(r.id) === String(rowId))
+          if (!rowObj) return
+          const oldDataJsonb = { ...rowObj }
+          delete oldDataJsonb.id
+          const newDataJsonb = {
+            ...oldDataJsonb,
+            [columnId]: newValue
+          }
+          await fetch('/api/data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'update',
+              updates: {
+                id: rowId,
+                data_jsonb: {
+                  data_jsonb: newDataJsonb
+                }
+              }
+            })
+          })
+        }
+      } catch (err) {
+        console.error('Failed to save cell revert to database:', err)
+      }
+    }
+
+    const handleUndoRedoKeyDown = async (e: KeyboardEvent) => {
+      const activeEl = document.activeElement
+      const isTyping = activeEl && (
+        activeEl.tagName === 'INPUT' || 
+        activeEl.tagName === 'TEXTAREA' || 
+        activeEl.getAttribute('contenteditable') === 'true'
+      )
+      if (isTyping) return
+
+      const isCmdZ = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.shiftKey
+      const isCmdShiftZ = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && e.shiftKey
+
+      if (isCmdZ) {
+        e.preventDefault()
+        const action = popUndo()
+        if (action) {
+          const { toast } = await import('sonner')
+          toast.success('Undid last change', { icon: '↩️' })
+          
+          for (const update of action.updates) {
+            const { rowId, columnId, oldValue } = update
+            setRowsData(prev => prev.map(r => String(r.id) === String(rowId) ? { ...r, [columnId]: oldValue } : r))
+            await saveCellToDatabase(rowId, columnId, oldValue)
+          }
+          incrementDataVersion()
+        }
+      } else if (isCmdShiftZ) {
+        e.preventDefault()
+        const action = popRedo()
+        if (action) {
+          const { toast } = await import('sonner')
+          toast.success('Redid change', { icon: '↪️' })
+          
+          for (const update of action.updates) {
+            const { rowId, columnId, newValue } = update
+            setRowsData(prev => prev.map(r => String(r.id) === String(rowId) ? { ...r, [columnId]: newValue } : r))
+            await saveCellToDatabase(rowId, columnId, newValue)
+          }
+          incrementDataVersion()
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleUndoRedoKeyDown)
+    return () => window.removeEventListener('keydown', handleUndoRedoKeyDown)
+  }, [popUndo, popRedo, databases, activeDatabaseId, rowsData, incrementDataVersion])
 
   // Auto-focus selected cell
   useEffect(() => {
@@ -592,6 +678,50 @@ export function Grid() {
     return rowIndex >= minRow && rowIndex <= maxRow && colIndex >= minCol && colIndex <= maxCol
   }
 
+  const selectedCellsStats = useMemo(() => {
+    const numericValues: number[] = []
+    let totalCellsCount = 0
+    let numericCellsCount = 0
+    
+    const currentRows = table.getRowModel().rows
+    const visibleHeaders = table.getFlatHeaders().map(h => h.id)
+    
+    currentRows.forEach((row, rowIndex) => {
+      visibleHeaders.forEach((header, colIndex) => {
+        if (isCellSelected(rowIndex, colIndex)) {
+          totalCellsCount++
+          const rawValue = row.original[header]
+          if (rawValue !== null && rawValue !== undefined && rawValue !== '') {
+            const cleaned = String(rawValue).replace(/[$,]/g, '').trim()
+            if (cleaned !== '') {
+              const num = Number(cleaned)
+              if (!isNaN(num)) {
+                numericValues.push(num)
+                numericCellsCount++
+              }
+            }
+          }
+        }
+      })
+    })
+    
+    if (numericCellsCount === 0) return null
+    
+    const sum = numericValues.reduce((a, b) => a + b, 0)
+    const avg = sum / numericCellsCount
+    const min = Math.min(...numericValues)
+    const max = Math.max(...numericValues)
+    
+    return {
+      sum,
+      avg,
+      min,
+      max,
+      count: totalCellsCount,
+      numericCount: numericCellsCount
+    }
+  }, [selection, multiCells, table, isCellSelected])
+
   const isCellFocused = (rowIndex: number, colIndex: number) => {
     if (!selection) return false
     return rowIndex === selection.endRow && colIndex === selection.endCol
@@ -642,6 +772,105 @@ export function Grid() {
     if (!selection) return
 
     const visibleCols = table.getVisibleFlatColumns()
+
+    // Handle Backspace / Delete clearing
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      e.preventDefault()
+      const minRow = Math.min(selection.startRow, selection.endRow)
+      const maxRow = Math.max(selection.startRow, selection.endRow)
+      const minCol = Math.min(selection.startCol, selection.endCol)
+      const maxCol = Math.max(selection.startCol, selection.endCol)
+      
+      const activeDatabase = databases.find(db => db.id === activeDatabaseId)
+      const isLegacy = activeDatabase?.is_legacy !== false
+      const updatesList: any[] = []
+      
+      for (let r = minRow; r <= maxRow; r++) {
+        const row = rows[r]
+        if (!row) continue
+        const rowId = row.original.id || row.original['Lead ID'] || row.original.lead_id
+        
+        for (let c = minCol; c <= maxCol; c++) {
+          if (isCellSelected(r, c)) {
+            const colId = visibleCols[c].id
+            const oldValue = row.original[colId]
+            if (oldValue !== null && oldValue !== undefined && oldValue !== '') {
+              updatesList.push({
+                rowId,
+                columnId: colId,
+                oldValue,
+                newValue: null,
+                rowObj: row.original
+              })
+            }
+          }
+        }
+      }
+      
+      if (updatesList.length > 0) {
+        // Update local state rowsData immediately
+        setRowsData(prev => prev.map(row => {
+          const match = updatesList.filter(u => String(u.rowId) === String(row.id))
+          if (match.length > 0) {
+            const updatedRow = { ...row }
+            match.forEach(m => {
+              updatedRow[m.columnId] = null
+            })
+            return updatedRow
+          }
+          return row
+        }))
+        
+        // Register in history for Undo/Redo support!
+        pushHistory({
+          updates: updatesList.map(u => ({
+            rowId: String(u.rowId),
+            rowIdKey: 'id',
+            columnId: u.columnId,
+            oldValue: u.oldValue,
+            newValue: null
+          }))
+        })
+        
+        // Asynchronously save to database
+        const saveAll = async () => {
+          try {
+            for (const u of updatesList) {
+              if (isLegacy) {
+                await (supabase.from('PhorzenSalesDatabase') as any)
+                  .update({ [u.columnId]: null })
+                  .eq('id', u.rowId)
+              } else {
+                const oldDataJsonb = { ...u.rowObj }
+                delete oldDataJsonb.id
+                const newDataJsonb = {
+                  ...oldDataJsonb,
+                  [u.columnId]: null
+                }
+                await fetch('/api/data', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    action: 'update',
+                    updates: {
+                      id: u.rowId,
+                      data_jsonb: {
+                        data_jsonb: newDataJsonb
+                      }
+                    }
+                  })
+                })
+              }
+            }
+            incrementDataVersion()
+          } catch (err) {
+            console.error('Failed to clear cells from DB:', err)
+          }
+        }
+        saveAll()
+      }
+      return
+    }
 
     // Handle Copy
     if (e.key === 'c' && (e.metaKey || e.ctrlKey)) {
@@ -974,6 +1203,51 @@ export function Grid() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Floating Selected Cells Summary Panel */}
+      {selectedCellsStats && selectedCellsStats.numericCount > 0 && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-4 px-4 py-2.5 bg-background/95 backdrop-blur-md border border-border/80 shadow-2xl rounded-2xl animate-in fade-in slide-in-from-bottom-4 duration-300 hover:scale-[1.02] transition-all select-none">
+          <div className="flex items-center gap-2 border-r border-border/50 pr-4">
+            <div className="p-1.5 bg-primary/10 rounded-lg text-primary">
+              <Sigma className="w-4 h-4" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Sum</span>
+              <span className="text-sm font-bold text-foreground">
+                {selectedCellsStats.sum.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-4 text-xs font-medium text-muted-foreground">
+            <div className="flex flex-col">
+              <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60 font-semibold">Average</span>
+              <span className="text-foreground font-semibold">
+                {selectedCellsStats.avg.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+            
+            <div className="flex flex-col">
+              <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60 font-semibold">Count</span>
+              <span className="text-foreground font-semibold">{selectedCellsStats.numericCount}</span>
+            </div>
+
+            <div className="flex flex-col">
+              <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60 font-semibold">Min</span>
+              <span className="text-foreground font-semibold">
+                {selectedCellsStats.min.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+
+            <div className="flex flex-col">
+              <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60 font-semibold">Max</span>
+              <span className="text-foreground font-semibold">
+                {selectedCellsStats.max.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       <OptionsEditorDialog />
     </div>
