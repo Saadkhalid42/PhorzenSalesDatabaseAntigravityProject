@@ -14,6 +14,7 @@ interface EditableCellProps {
   rowId: string
   columnId: string
   onUpdate?: () => void
+  onCellChange?: (rowId: string, columnId: string, newValue: any) => void
   uniqueValues?: string[]
   isFocused?: boolean
   rowObj?: any
@@ -186,7 +187,7 @@ function SelectDropdown({
   )
 }
 
-export function EditableCell({ initialValue, rowId, columnId, onUpdate, uniqueValues = [], isFocused, rowObj }: EditableCellProps) {
+export function EditableCell({ initialValue, rowId, columnId, onUpdate, onCellChange, uniqueValues = [], isFocused, rowObj }: EditableCellProps) {
   const [lastInitialValue, setLastInitialValue] = useState(initialValue)
   const [currentValue, setCurrentValue] = useState(initialValue)
   const [value, setValue] = useState(formatValue(initialValue))
@@ -282,6 +283,7 @@ export function EditableCell({ initialValue, rowId, columnId, onUpdate, uniqueVa
             }]
           })
 
+          if (onCellChange) onCellChange(rowId, columnId, newValue)
           if (onUpdate) onUpdate()
         }
       } catch (e) {
@@ -289,7 +291,7 @@ export function EditableCell({ initialValue, rowId, columnId, onUpdate, uniqueVa
         setCurrentValue(previousValue)
       }
     }
-  }, [currentValue, columnId, rowId, pushHistory, onUpdate, databases, activeDatabaseId, rowObj])
+  }, [currentValue, columnId, rowId, pushHistory, onUpdate, onCellChange, databases, activeDatabaseId, rowObj])
 
   const handleStartEdit = (replaceWith?: string) => {
     if (fieldType === 'boolean') return

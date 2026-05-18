@@ -242,6 +242,10 @@ export function Grid() {
     }
   }, [selection])
 
+  const handleCellChange = useCallback((rId: string, colId: string, val: any) => {
+    setRowsData(prev => prev.map(r => String(r._db_uuid || r.id) === String(rId) ? { ...r, [colId]: val } : r))
+  }, [])
+
   const handleAddRow = async () => {
     setIsAddingRow(true)
     try {
@@ -466,10 +470,10 @@ export function Grid() {
       cell: info => {
         // Fallback row id logic
         const rowId = info.row.original._db_uuid || info.row.original.id || info.row.original['Lead ID'] || info.row.original.lead_id
-        return <EditableCell initialValue={info.getValue()} rowId={rowId} columnId={key} uniqueValues={uniqueValuesByColumn[key] || []} rowObj={info.row.original} />
+        return <EditableCell initialValue={info.getValue()} rowId={rowId} columnId={key} uniqueValues={uniqueValuesByColumn[key] || []} rowObj={info.row.original} onCellChange={handleCellChange} />
       }
     }))
-  }, [availableFields, rowsData, uniqueValuesByColumn])
+  }, [availableFields, rowsData, uniqueValuesByColumn, handleCellChange])
   
   // Initialize column order if empty
   useEffect(() => {
