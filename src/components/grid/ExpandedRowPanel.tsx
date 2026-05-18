@@ -72,6 +72,7 @@ export function ExpandedRowPanel({ rowData, headers, onUpdate }: ExpandedRowPane
                     rowId={rowId} 
                     columnId={header} 
                     onUpdate={onUpdate}
+                    rowObj={rowData}
                   />
                 </div>
               </div>

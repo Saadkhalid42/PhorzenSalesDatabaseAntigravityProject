@@ -3,7 +3,8 @@ import React, { useState, useRef, useEffect } from 'react'
 import { Search, Check, ChevronDown, X, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Input } from '@/components/ui/input'
-import { WidgetCondition, WidgetConfig, AggregationType } from '@/store/useStore'
+import { useStore, WidgetCondition, WidgetConfig, AggregationType } from '@/store/useStore'
+import { FilterValuePicker } from '@/components/grid/FilterBuilder'
 
 import { Combobox } from '@/components/ui/combobox'
 
@@ -28,21 +29,33 @@ export function ConditionRow({ cond, fields, onChange, onRemove }: {
   cond: WidgetCondition; fields: string[]
   onChange: (u: Partial<WidgetCondition>) => void; onRemove: () => void
 }) {
+  const { uniqueValuesByColumn, customSelectOptions } = useStore()
   const opMeta = OPERATORS.find(o => o.value === cond.operator)
+  const uniqueValues = customSelectOptions[cond.field] || uniqueValuesByColumn[cond.field] || []
+  const useDropdown = ['equals', 'not_equals'].includes(cond.operator) && uniqueValues.length > 0
+
   return (
     <div className="flex items-start gap-2">
       <div className="flex-1 grid grid-cols-2 gap-2">
-        <Combobox value={cond.field} onChange={v => onChange({ field: v })} options={fields} placeholder="Field…" />
+        <Combobox value={cond.field} onChange={v => onChange({ field: v, value: '' })} options={fields} placeholder="Field…" />
         <Combobox
           value={opMeta?.label ?? ''}
-          onChange={v => { const op = OPERATORS.find(o => o.label === v); if (op) onChange({ operator: op.value }) }}
+          onChange={v => { const op = OPERATORS.find(o => o.label === v); if (op) onChange({ operator: op.value, value: '' }) }}
           options={OPERATORS.map(o => o.label)}
           placeholder="Operator…"
         />
         {opMeta?.hasValue && (
           <div className="col-span-2">
-            <Input value={cond.value || ''} onChange={e => onChange({ value: e.target.value })}
-              placeholder="Value…" className="h-8 text-sm" />
+            {useDropdown ? (
+              <FilterValuePicker
+                value={cond.value || ''}
+                options={uniqueValues}
+                onChange={v => onChange({ value: v })}
+              />
+            ) : (
+              <Input value={cond.value || ''} onChange={e => onChange({ value: e.target.value })}
+                placeholder="Value…" className="h-8 text-sm" />
+            )}
           </div>
         )}
       </div>

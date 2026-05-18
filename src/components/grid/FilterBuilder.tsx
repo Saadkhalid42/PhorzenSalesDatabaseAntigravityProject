@@ -16,6 +16,8 @@ const PILL_COLORS = [
   'bg-purple-500/15 text-purple-700 border-purple-400/30 dark:text-purple-400',
   'bg-rose-500/15 text-rose-700 border-rose-400/30 dark:text-rose-400',
   'bg-cyan-500/15 text-cyan-700 border-cyan-400/30 dark:text-cyan-400',
+  'bg-orange-500/15 text-orange-700 border-orange-400/30 dark:text-orange-400',
+  'bg-indigo-500/15 text-indigo-700 border-indigo-400/30 dark:text-indigo-400',
 ]
 
 function getPillColor(value: string) {
@@ -24,8 +26,76 @@ function getPillColor(value: string) {
   return PILL_COLORS[Math.abs(hash) % PILL_COLORS.length]
 }
 
-// In-app filter value picker for select fields
-function FilterValuePicker({
+// ── In-app operator selector ─────────────────────────────────────────────────
+function OperatorPicker({
+  value,
+  onChange,
+}: {
+  value: FilterOperator
+  onChange: (op: FilterOperator) => void
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        className="h-8 flex-1 flex items-center justify-between gap-1 px-2 border border-border rounded-md text-xs bg-muted/50 hover:bg-muted transition-colors focus:outline-none focus:ring-1 focus:ring-primary min-w-[90px]"
+      >
+        <span className="truncate">{value}</span>
+        <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />
+      </PopoverTrigger>
+      <PopoverContent className="p-1 w-44 shadow-xl border border-border/60 rounded-xl overflow-hidden" align="start" sideOffset={4}>
+        {OPERATORS.map(op => (
+          <button
+            key={op}
+            className={cn(
+              'w-full text-left px-3 py-2 text-xs rounded-lg transition-colors flex items-center justify-between',
+              op === value ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted text-foreground'
+            )}
+            onClick={() => { onChange(op); setOpen(false) }}
+          >
+            {op}
+            {op === value && <Check className="w-3 h-3 shrink-0" />}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+// ── In-app combinator toggle ──────────────────────────────────────────────────
+function CombinatorToggle({
+  value,
+  onChange,
+}: {
+  value: 'and' | 'or'
+  onChange: (v: 'and' | 'or') => void
+}) {
+  return (
+    <div className="flex rounded-md border border-border overflow-hidden text-[10px] font-semibold">
+      <button
+        className={cn(
+          'px-2 py-1 transition-colors',
+          value === 'and' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
+        )}
+        onClick={() => onChange('and')}
+      >
+        AND
+      </button>
+      <button
+        className={cn(
+          'px-2 py-1 transition-colors border-l border-border',
+          value === 'or' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
+        )}
+        onClick={() => onChange('or')}
+      >
+        OR
+      </button>
+    </div>
+  )
+}
+
+// ── In-app value picker for select fields ────────────────────────────────────
+export function FilterValuePicker({
   value,
   options,
   onChange,
@@ -42,13 +112,13 @@ function FilterValuePicker({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         className={cn(
-          "h-8 flex-1 flex items-center gap-1.5 px-2 border border-border rounded-md text-xs text-left transition-colors",
-          "bg-background hover:bg-muted focus:outline-none focus:ring-1 focus:ring-primary"
+          'h-8 w-full flex items-center gap-1.5 px-2 border border-border rounded-md text-xs text-left transition-colors',
+          'bg-background hover:bg-muted focus:outline-none focus:ring-1 focus:ring-primary'
         )}
       >
         {value ? (
           <span className={cn(
-            "flex-1 px-1.5 py-0.5 rounded text-[11px] font-medium border truncate",
+            'flex-1 px-1.5 py-0.5 rounded text-[11px] font-medium border truncate',
             getPillColor(value)
           )}>
             {value}
@@ -68,7 +138,7 @@ function FilterValuePicker({
             className="w-full h-7 bg-muted/50 rounded-md px-2 text-xs outline-none focus:ring-1 focus:ring-primary border border-border/50"
           />
         </div>
-        <div className="max-h-48 overflow-y-auto py-1">
+        <div className="max-h-52 overflow-y-auto py-1">
           {value && (
             <button
               className="w-full text-left px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted flex items-center gap-2 transition-colors"
@@ -81,13 +151,13 @@ function FilterValuePicker({
             <button
               key={opt}
               className={cn(
-                "w-full text-left px-3 py-1.5 text-xs hover:bg-muted flex items-center gap-2 transition-colors",
-                opt === value && "bg-primary/5"
+                'w-full text-left px-3 py-1.5 text-xs hover:bg-muted flex items-center gap-2 transition-colors',
+                opt === value && 'bg-primary/5'
               )}
               onClick={() => { onChange(opt); setOpen(false) }}
             >
               <span className={cn(
-                "flex-1 px-1.5 py-0.5 rounded text-[11px] font-medium border truncate",
+                'flex-1 px-1.5 py-0.5 rounded text-[11px] font-medium border truncate',
                 getPillColor(opt)
               )}>
                 {opt}
@@ -96,7 +166,7 @@ function FilterValuePicker({
             </button>
           ))}
           {filtered.length === 0 && (
-            <div className="px-3 py-3 text-xs text-muted-foreground text-center">No options</div>
+            <div className="px-3 py-3 text-xs text-muted-foreground text-center">No options found</div>
           )}
         </div>
       </PopoverContent>
@@ -105,7 +175,7 @@ function FilterValuePicker({
 }
 
 export function FilterBuilder() {
-  const { filters, addFilter, removeFilter, updateFilter, availableFields, uniqueValuesByColumn } = useStore()
+  const { filters, addFilter, removeFilter, updateFilter, availableFields, uniqueValuesByColumn, customSelectOptions } = useStore()
 
   const handleAddFilter = () => {
     addFilter({
@@ -118,53 +188,51 @@ export function FilterBuilder() {
   }
 
   return (
-    <div className="space-y-4 p-1">
+    <div className="space-y-3 p-1">
       {filters.length === 0 ? (
-        <p className="text-xs text-muted-foreground mb-4">No filters applied to this view</p>
+        <p className="text-xs text-muted-foreground">No filters applied to this view</p>
       ) : (
         <div className="space-y-2">
           {filters.map((filter, index) => (
-            <div key={filter.id} className="flex items-center gap-2 text-sm">
-              <div className="w-16 shrink-0 text-muted-foreground text-xs">
-                {index === 0 ? 'Where' : (
-                  <select 
-                    className="bg-transparent border-none outline-none focus:ring-0 cursor-pointer hover:text-primary transition-colors font-medium"
+            <div key={filter.id} className="flex items-center gap-2">
+              {/* Combinator */}
+              <div className="w-16 shrink-0 flex justify-center">
+                {index === 0 ? (
+                  <span className="text-xs text-muted-foreground font-medium">Where</span>
+                ) : (
+                  <CombinatorToggle
                     value={filter.combinator}
-                    onChange={(e) => updateFilter(filter.id, { combinator: e.target.value as 'and' | 'or' })}
-                  >
-                    <option value="and">And</option>
-                    <option value="or">Or</option>
-                  </select>
+                    onChange={(v) => updateFilter(filter.id, { combinator: v })}
+                  />
                 )}
               </div>
-              
+
+              {/* Field */}
               <FieldSelector
                 fields={availableFields}
                 value={filter.field}
-                onChange={(val) => updateFilter(filter.id, { field: val })}
-                className="flex-1"
+                onChange={(val) => updateFilter(filter.id, { field: val, value: '' })}
+                className="flex-1 min-w-0"
               />
 
-              <select 
-                className="h-8 flex-1 bg-muted/50 border border-border rounded-md px-2 focus:outline-none focus:ring-1 focus:ring-primary text-xs"
+              {/* Operator - fully in-app */}
+              <OperatorPicker
                 value={filter.operator}
-                onChange={(e) => updateFilter(filter.id, { operator: e.target.value as FilterOperator })}
-              >
-                {OPERATORS.map(op => (
-                  <option key={op} value={op}>{op}</option>
-                ))}
-              </select>
+                onChange={(op) => updateFilter(filter.id, { operator: op, value: '' })}
+              />
 
+              {/* Value */}
               {!['is empty', 'is not empty'].includes(filter.operator) && (
-                <div className="flex-1">
-                  {(['is', 'is not'].includes(filter.operator) && uniqueValuesByColumn[filter.field]?.length > 0) ? (
+                <div className="flex-1 min-w-0">
+                  {(['is', 'is not'].includes(filter.operator) && ((customSelectOptions[filter.field] || uniqueValuesByColumn[filter.field])?.length > 0)) ? (
+                    // Select field → show the in-app pill picker with the field's actual options
                     <FilterValuePicker
                       value={filter.value}
-                      options={uniqueValuesByColumn[filter.field]}
+                      options={customSelectOptions[filter.field] || uniqueValuesByColumn[filter.field]}
                       onChange={(val) => updateFilter(filter.id, { value: val })}
                     />
                   ) : (
-                    <input 
+                    <input
                       type="text"
                       placeholder="Value..."
                       className="h-8 w-full bg-background border border-border rounded-md px-2 focus:outline-none focus:ring-1 focus:ring-primary text-xs"
@@ -175,7 +243,12 @@ export function FilterBuilder() {
                 </div>
               )}
 
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0" onClick={() => removeFilter(filter.id)}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0"
+                onClick={() => removeFilter(filter.id)}
+              >
                 <X className="h-4 w-4" />
               </Button>
             </div>

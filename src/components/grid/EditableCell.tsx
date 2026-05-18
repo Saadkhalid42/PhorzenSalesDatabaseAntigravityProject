@@ -7,7 +7,7 @@ import { useStore } from '@/store/useStore'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
 import { format, parseISO, isValid } from 'date-fns'
-import { Check, ChevronDown, Plus, X } from 'lucide-react'
+import { Check, ChevronDown, Plus, X, ListPlus } from 'lucide-react'
 
 interface EditableCellProps {
   initialValue: any
@@ -16,6 +16,7 @@ interface EditableCellProps {
   onUpdate?: () => void
   uniqueValues?: string[]
   isFocused?: boolean
+  rowObj?: any
 }
 
 const formatValue = (val: any) => {
@@ -80,14 +81,17 @@ function SelectDropdown({
   uniqueValues,
   onSelect,
   onClose,
+  columnId,
 }: {
   currentValue: string
   uniqueValues: string[]
   onSelect: (val: string) => void
   onClose: () => void
+  columnId: string
 }) {
   const [search, setSearch] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
+  const { setOptionsEditor } = useStore()
   
   useEffect(() => {
     setTimeout(() => inputRef.current?.focus(), 50)
@@ -164,18 +168,32 @@ function SelectDropdown({
           </button>
         )}
       </div>
+
+      {/* Footer to Edit Select Options */}
+      <div className="border-t border-border/80 px-2 py-1.5 bg-muted/20">
+        <button
+          onClick={() => {
+            setOptionsEditor(columnId, true)
+            onClose()
+          }}
+          className="w-full h-7 text-xs font-semibold text-primary hover:text-primary-foreground hover:bg-primary border border-primary/20 rounded-md flex items-center justify-center gap-1.5 transition-all shadow-sm focus:outline-none"
+        >
+          <ListPlus className="w-3.5 h-3.5" />
+          Edit options
+        </button>
+      </div>
     </div>
   )
 }
 
-export function EditableCell({ initialValue, rowId, columnId, onUpdate, uniqueValues = [], isFocused }: EditableCellProps) {
+export function EditableCell({ initialValue, rowId, columnId, onUpdate, uniqueValues = [], isFocused, rowObj }: EditableCellProps) {
   const [lastInitialValue, setLastInitialValue] = useState(initialValue)
   const [currentValue, setCurrentValue] = useState(initialValue)
   const [value, setValue] = useState(formatValue(initialValue))
   const [isEditing, setIsEditing] = useState(false)
   const [isDateOpen, setIsDateOpen] = useState(false)
   const [isSelectOpen, setIsSelectOpen] = useState(false)
-  const { pushHistory, fieldTypeOverrides } = useStore()
+  const { pushHistory, fieldTypeOverrides, databases, activeDatabaseId, customSelectOptions } = useStore()
 
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -201,9 +219,43 @@ export function EditableCell({ initialValue, rowId, columnId, onUpdate, uniqueVa
       const rowIdKey = 'id'
 
       try {
-        const { error } = await (supabase.from('PhorzenSalesDatabase') as any)
-          .update({ [columnId]: newValue })
-          .eq(rowIdKey, rowId)
+        const activeDatabase = databases.find(db => db.id === activeDatabaseId)
+        const isLegacy = activeDatabase?.is_legacy !== false
+
+        let error = null
+        if (isLegacy) {
+          const { error: err } = await (supabase.from('PhorzenSalesDatabase') as any)
+            .update({ [columnId]: newValue })
+            .eq(rowIdKey, rowId)
+          error = err
+        } else {
+          // Dynamic Database: construct newDataJsonb and call /api/data
+          const oldDataJsonb = { ...rowObj }
+          delete oldDataJsonb.id
+          const newDataJsonb = {
+            ...oldDataJsonb,
+            [columnId]: newValue
+          }
+          const res = await fetch('/api/data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'update',
+              updates: {
+                id: rowId,
+                data_jsonb: {
+                  data_jsonb: newDataJsonb
+                }
+              }
+            })
+          })
+          if (!res.ok) {
+            error = new Error('Failed to update dynamic database row')
+          } else {
+            const json = await res.json()
+            if (json.error) error = new Error(json.error)
+          }
+        }
 
         if (error) {
           console.error('Failed to update cell:', error)
@@ -237,7 +289,7 @@ export function EditableCell({ initialValue, rowId, columnId, onUpdate, uniqueVa
         setCurrentValue(previousValue)
       }
     }
-  }, [currentValue, columnId, rowId, pushHistory, onUpdate])
+  }, [currentValue, columnId, rowId, pushHistory, onUpdate, databases, activeDatabaseId, rowObj])
 
   const handleStartEdit = (replaceWith?: string) => {
     if (fieldType === 'boolean') return
@@ -383,16 +435,16 @@ export function EditableCell({ initialValue, rowId, columnId, onUpdate, uniqueVa
           className="p-0 w-auto shadow-xl border border-border/60 rounded-xl overflow-hidden"
           align="start"
           sideOffset={4}
-          onOpenAutoFocus={e => e.preventDefault()}
         >
           <SelectDropdown
             currentValue={displayVal}
-            uniqueValues={uniqueValues}
+            uniqueValues={customSelectOptions[columnId] || uniqueValues}
             onSelect={val => {
               setCurrentValue(val)
               saveChange(val)
             }}
             onClose={() => setIsSelectOpen(false)}
+            columnId={columnId}
           />
         </PopoverContent>
       </Popover>

@@ -181,6 +181,14 @@ interface AppState {
   setFieldTypeOverride: (column: string, type: string) => void
   clearFieldTypeOverride: (column: string) => void
 
+  customSelectOptions: Record<string, string[]>
+  setCustomSelectOptions: (column: string, options: string[]) => void
+
+  optionsEditorOpen: boolean
+  optionsEditorColumn: string | null
+  optionsEditorTargetType: string | null
+  setOptionsEditor: (columnName: string | null, open: boolean, targetType?: string | null) => void
+
   searchQuery: string
   setSearchQuery: (query: string) => void
 
@@ -593,6 +601,20 @@ export const useStore = create<AppState>((set, get) => ({
     const next = { ...state.fieldTypeOverrides }
     delete next[column]
     return { fieldTypeOverrides: next }
+  }),
+
+  customSelectOptions: {},
+  setCustomSelectOptions: (column, options) => set((state) => ({
+    customSelectOptions: { ...state.customSelectOptions, [column]: options }
+  })),
+
+  optionsEditorOpen: false,
+  optionsEditorColumn: null,
+  optionsEditorTargetType: null,
+  setOptionsEditor: (columnName, open, targetType = null) => set({
+    optionsEditorOpen: open,
+    optionsEditorColumn: columnName,
+    optionsEditorTargetType: targetType
   }),
 
   searchQuery: '',

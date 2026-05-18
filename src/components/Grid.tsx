@@ -13,6 +13,7 @@ import { supabase } from '@/lib/supabase/client'
 import { ColumnHeaderMenu } from '@/components/grid/ColumnHeaderMenu'
 import { EditableCell } from '@/components/grid/EditableCell'
 import { ExpandedRowPanel } from '@/components/grid/ExpandedRowPanel'
+import { OptionsEditorDialog } from '@/components/grid/OptionsEditorDialog'
 import {
   DndContext,
   closestCenter,
@@ -108,6 +109,7 @@ export function Grid() {
     rowHeight,
     hiddenColumns,
     setAvailableFields,
+    availableFields,
     searchQuery,
     columnOrder,
     setColumnOrder,
@@ -240,7 +242,14 @@ export function Grid() {
             setRowsData(data || [])
             if (data && data.length > 0) {
               const keys = Object.keys(data[0]).filter(k => !k.toLowerCase().includes('id'))
-              setAvailableFields(keys)
+              if (availableFields.length === 0) {
+                setAvailableFields(keys)
+              } else {
+                const missing = keys.filter(k => !availableFields.includes(k))
+                if (missing.length > 0) {
+                  setAvailableFields([...availableFields, ...missing])
+                }
+              }
             }
           }
         } else {
@@ -292,9 +301,15 @@ export function Grid() {
 
           setRowsData(rows)
           if (rows.length > 0) {
-             setAvailableFields(Object.keys(rows[0]).filter(k => !k.toLowerCase().includes('id')))
-          } else {
-             setAvailableFields([])
+            const keys = Object.keys(rows[0]).filter(k => !k.toLowerCase().includes('id'))
+            if (availableFields.length === 0) {
+              setAvailableFields(keys)
+            } else {
+              const missing = keys.filter(k => !availableFields.includes(k))
+              if (missing.length > 0) {
+                setAvailableFields([...availableFields, ...missing])
+              }
+            }
           }
         }
       } catch (err) {
@@ -332,16 +347,19 @@ export function Grid() {
     setUniqueValuesByColumn(uniqueValuesByColumn)
   }, [uniqueValuesByColumn, setUniqueValuesByColumn])
 
-  // Dynamically generate columns based on the keys of the first row
+  // Dynamically generate columns based on availableFields (or keys of the first row)
   const columns: ColumnDef<DynamicRowData>[] = useMemo(() => {
-    if (rowsData.length === 0) return []
-
-    // Get all unique keys from all rows (or just the first one if we assume uniform schema)
-    // PhorzenSalesDatabase has a fixed schema, so first row is fine.
-    const keys = Object.keys(rowsData[0]).filter(key => {
+    let keys = availableFields.filter(key => {
       const lower = key.toLowerCase()
       return lower !== 'id' && lower !== 'lead id' && lower !== 'lead_id'
     })
+
+    if (keys.length === 0 && rowsData.length > 0) {
+      keys = Object.keys(rowsData[0]).filter(key => {
+        const lower = key.toLowerCase()
+        return lower !== 'id' && lower !== 'lead id' && lower !== 'lead_id'
+      })
+    }
 
     return keys.map(key => ({
       id: key,
@@ -360,10 +378,10 @@ export function Grid() {
       cell: info => {
         // Fallback row id logic
         const rowId = info.row.original.id || info.row.original['Lead ID'] || info.row.original.lead_id
-        return <EditableCell initialValue={info.getValue()} rowId={rowId} columnId={key} uniqueValues={uniqueValuesByColumn[key] || []} />
+        return <EditableCell initialValue={info.getValue()} rowId={rowId} columnId={key} uniqueValues={uniqueValuesByColumn[key] || []} rowObj={info.row.original} />
       }
     }))
-  }, [rowsData, uniqueValuesByColumn])
+  }, [availableFields, rowsData, uniqueValuesByColumn])
   
   // Initialize column order if empty
   useEffect(() => {
@@ -956,6 +974,8 @@ export function Grid() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <OptionsEditorDialog />
     </div>
   )
 }

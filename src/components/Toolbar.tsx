@@ -332,12 +332,18 @@ export function Toolbar() {
         })
         if (!createRes.ok) throw new Error('Failed to create table in backend')
         addDatabase(dbDialog.name, false, newDbId)
+        const { toast } = await import('sonner')
+        toast.success(`Database "${dbDialog.name}" created successfully!`)
       } catch (err) {
         console.error(err)
-        alert('Failed to create database on server.')
+        const { toast } = await import('sonner')
+        toast.error('Failed to create database on server. Added locally.')
+        addDatabase(dbDialog.name, false, newDbId)
       }
     } else if (dbDialog.mode === 'edit' && dbDialog.id) {
       renameDatabase(dbDialog.id, dbDialog.name)
+      const { toast } = await import('sonner')
+      toast.success('Database renamed successfully!')
     }
     setDbDialog({ open: false, mode: 'create', name: '' })
   }
@@ -837,7 +843,13 @@ export function Toolbar() {
             min={24}
             max={120}
             step={4}
-            onValueChange={([val]) => setRowHeight(val)}
+            onValueChange={(val) => {
+              if (Array.isArray(val)) {
+                setRowHeight(val[0])
+              } else if (typeof val === 'number') {
+                setRowHeight(val)
+              }
+            }}
           />
           <div className="flex justify-between text-[10px] text-muted-foreground uppercase tracking-wider font-bold">
             <span>Short</span>
@@ -881,7 +893,7 @@ export function Toolbar() {
             />
             <div className="space-y-2">
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Icon</label>
-              <IconPicker value={wsDialog.icon as IconName} onChange={(icon) => setWsDialog(prev => ({ ...prev, icon }))} />
+              <IconPicker selected={wsDialog.icon as IconName} onSelect={(icon) => setWsDialog(prev => ({ ...prev, icon }))} />
             </div>
           </div>
           <DialogFooter>
@@ -905,7 +917,7 @@ export function Toolbar() {
             />
             <div className="space-y-2">
               <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Icon</label>
-              <IconPicker value={viewDialog.icon as IconName} onChange={(icon) => setViewDialog(prev => ({ ...prev, icon }))} />
+              <IconPicker selected={viewDialog.icon as IconName} onSelect={(icon) => setViewDialog(prev => ({ ...prev, icon }))} />
             </div>
             {viewDialog.mode === 'create' && (
               <div className="space-y-2">

@@ -111,9 +111,12 @@ export function CsvImportWizard({ open, onOpenChange }: CsvImportWizardProps) {
           
           // Note: addDatabase will make this active. The effect in Grid.tsx will fetch the newly inserted rows!
           onClose()
+          const { toast } = await import('sonner')
+          toast.success('CSV Database imported successfully!')
         } catch (error) {
           console.error(error)
-          alert('Import failed. Check console.')
+          const { toast } = await import('sonner')
+          toast.error('Import failed. Check console for details.')
         } finally {
           setIsImporting(false)
         }

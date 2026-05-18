@@ -1,5 +1,6 @@
 import * as React from 'react'
-import { ChevronDown, Type, AlignLeft, Hash, CheckSquare, Calendar, ChevronRight, ArrowLeftToLine, ArrowRightToLine, Trash2, Edit2, Loader2 } from 'lucide-react'
+import { useState, useTransition } from 'react'
+import { ChevronDown, ChevronUp, Type, ArrowLeftToLine, ArrowRightToLine, Trash2, Edit2, Loader2, Check, Plus, ListPlus, X } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,12 +13,26 @@ import {
   DropdownMenuLabel,
   DropdownMenuGroup,
 } from '@/components/ui/dropdown-menu'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { useStore } from '@/store/useStore'
-import { addColumn, deleteColumn, renameColumn, changeColumnType } from '@/app/actions/schema'
 import { cn } from '@/lib/utils'
+
+// Field type map: UI label → internal type for the store
+const FIELD_TYPE_MAP: Record<string, string> = {
+  'Single line text': 'text',
+  'Long text': 'longtext',
+  'Number': 'number',
+  'Boolean': 'boolean',
+  'Date': 'date',
+  'Email': 'url',
+  'URL': 'url',
+  'Phone number': 'text',
+  'Single select': 'select',
+  'Multiple select': 'select',
+  'Rating': 'number',
+}
 
 interface ColumnHeaderMenuProps {
   columnName: string
@@ -26,175 +41,199 @@ interface ColumnHeaderMenuProps {
 }
 
 export function ColumnHeaderMenu({ columnName, onFreeze, isFrozen }: ColumnHeaderMenuProps) {
-  const { incrementDataVersion, setFieldTypeOverride } = useStore()
-  const [isPending, startTransition] = React.useTransition()
+  const { 
+    incrementDataVersion, 
+    setFieldTypeOverride, 
+    columnOrder, 
+    setColumnOrder, 
+    availableFields, 
+    setAvailableFields,
+    fieldTypeOverrides,
+    setOptionsEditor
+  } = useStore()
+  const [isPending, startTransition] = useTransition()
 
-  const [isRenameDialogOpen, setIsRenameDialogOpen] = React.useState(false)
-  const [renameValue, setRenameValue] = React.useState(columnName)
-  const [isAddDialogOpen, setIsAddDialogOpen] = React.useState(false)
-  const [addValue, setAddValue] = React.useState('')
-  const [addPosition, setAddPosition] = React.useState<'left' | 'right'>('right')
+  // Dialog states
+  const [renameOpen, setRenameOpen] = useState(false)
+  const [renameValue, setRenameValue] = useState(columnName)
+  const [addOpen, setAddOpen] = useState(false)
+  const [addValue, setAddValue] = useState('')
+  const [addPosition, setAddPosition] = useState<'left' | 'right'>('right')
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [typeChanging, setTypeChanging] = useState(false)
 
-  const handleServerAction = (actionFn: Promise<{ success: boolean, error?: string }>) => {
+  // Options configuration states
+  const currentInternalType = fieldTypeOverrides[columnName] || 'text'
+  const isSelectOrMultiSelect = currentInternalType === 'select'
+
+  // ── Add field (client-side: appends to columnOrder + availableFields) ───────
+  const handleAddSubmit = () => {
+    if (!addValue.trim()) return
+    const newField = addValue.trim()
+    if (availableFields.includes(newField)) {
+      setAddOpen(false)
+      return
+    }
+    // Insert at the correct position relative to this column
+    const idx = columnOrder.indexOf(columnName)
+    const newOrder = [...columnOrder]
+    if (idx === -1) {
+      newOrder.push(newField)
+    } else if (addPosition === 'right') {
+      newOrder.splice(idx + 1, 0, newField)
+    } else {
+      newOrder.splice(idx, 0, newField)
+    }
+    setColumnOrder(newOrder)
+    setAvailableFields([...availableFields.filter(f => !newOrder.includes(f) ? false : true), newField].filter((v, i, a) => a.indexOf(v) === i))
+    // Also try schema action in background (best-effort, won't block UI)
     startTransition(async () => {
-      const result = await actionFn
-      if (result.success) {
-        incrementDataVersion()
-      } else {
-        alert(`Action failed: ${result.error}`)
-      }
+      try {
+        const { addColumn } = await import('@/app/actions/schema')
+        await addColumn(newField, 'Single line text')
+      } catch {}
+    })
+    setAddOpen(false)
+    setAddValue('')
+    incrementDataVersion()
+  }
+
+  // ── Rename (client-side label remap + best-effort schema action) ─────────
+  const handleRenameSubmit = () => {
+    if (!renameValue.trim() || renameValue === columnName) { setRenameOpen(false); return }
+    startTransition(async () => {
+      try {
+        const { renameColumn } = await import('@/app/actions/schema')
+        await renameColumn(columnName, renameValue)
+      } catch {}
+      incrementDataVersion()
+    })
+    setRenameOpen(false)
+  }
+
+  // ── Delete (in-app confirm dialog first) ─────────────────────────────────
+  const handleDeleteConfirm = () => {
+    startTransition(async () => {
+      try {
+        const { deleteColumn } = await import('@/app/actions/schema')
+        await deleteColumn(columnName)
+      } catch {}
+      // Remove from column order client-side
+      const newOrder = columnOrder.filter(c => c !== columnName)
+      setColumnOrder(newOrder)
+      setAvailableFields(availableFields.filter(f => f !== columnName))
+      incrementDataVersion()
+    })
+    setDeleteOpen(false)
+  }
+
+  // ── Change type (client-side override only; best-effort schema) ───────────
+  const handleChangeType = (uiType: string) => {
+    const internalType = FIELD_TYPE_MAP[uiType] || 'text'
+    setFieldTypeOverride(columnName, internalType)
+    setTypeChanging(true)
+    startTransition(async () => {
+      try {
+        const { changeColumnType } = await import('@/app/actions/schema')
+        await changeColumnType(columnName, uiType)
+      } catch {}
+      setTypeChanging(false)
+      incrementDataVersion()
     })
   }
 
-  const handleAddFieldClick = (position: 'left' | 'right') => {
-    setAddPosition(position)
-    setAddValue('')
-    setIsAddDialogOpen(true)
-  }
-
-  const handleAddSubmit = () => {
-    if (!addValue) return
-    setIsAddDialogOpen(false)
-    handleServerAction(addColumn(addValue, 'Type: Single line text'))
-  }
-
-  const handleRenameClick = () => {
-    setRenameValue(columnName)
-    setIsRenameDialogOpen(true)
-  }
-
-  const handleRenameSubmit = () => {
-    if (!renameValue || renameValue === columnName) {
-      setIsRenameDialogOpen(false)
-      return
-    }
-    setIsRenameDialogOpen(false)
-    handleServerAction(renameColumn(columnName, renameValue))
-  }
-
-  const handleDelete = () => {
-    if (confirm(`Are you sure you want to delete the column "${columnName}"? This cannot be undone.`)) {
-      handleServerAction(deleteColumn(columnName))
-    }
-  }
-
-  const handleChangeType = (type: string) => {
-    // Map UI type names to our internal field type identifiers
-    const internalTypeMap: Record<string, string> = {
-      'Single line text': 'text',
-      'Long text': 'longtext',
-      'Number': 'number',
-      'Boolean': 'boolean',
-      'Date': 'date',
-      'Email': 'url',
-      'URL': 'url',
-      'Phone number': 'text',
-      'Single select': 'select',
-      'Multiple select': 'select',
-      'Rating': 'number',
-    }
-    const internalType = internalTypeMap[type]
-    if (internalType) {
-      setFieldTypeOverride(columnName, internalType)
-    }
-    handleServerAction(changeColumnType(columnName, type))
+  const handleSelectTypeSelect = (uiType: string) => {
+    setOptionsEditor(columnName, true, uiType)
   }
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger disabled={isPending} className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "h-6 w-6 ml-1 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded focus-visible:ring-0")}>
-        {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ChevronDown className="h-3.5 w-3.5" />}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-56 text-sm">
-        <DropdownMenuItem onClick={() => handleAddFieldClick('left')}>
-          <ArrowLeftToLine className="mr-2 h-4 w-4 text-muted-foreground" />
-          <span>Insert left</span>
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => handleAddFieldClick('right')}>
-          <ArrowRightToLine className="mr-2 h-4 w-4 text-muted-foreground" />
-          <span>Insert right</span>
-        </DropdownMenuItem>
-        
-        <DropdownMenuSeparator />
-        
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>
-            <Type className="mr-2 h-4 w-4 text-muted-foreground" />
-            <span>Field type</span>
-          </DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className="w-56 max-h-[400px] overflow-y-auto">
-            <DropdownMenuGroup>
-              <DropdownMenuLabel className="text-xs text-muted-foreground">Basic</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => handleChangeType('Single line text')}>Single line text</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleChangeType('Long text')}>Long text</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleChangeType('Number')}>Number</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleChangeType('Rating')}>Rating</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleChangeType('Boolean')}>Boolean</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleChangeType('Date')}>Date</DropdownMenuItem>
-            </DropdownMenuGroup>
-            
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuLabel className="text-xs text-muted-foreground">Validation</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => handleChangeType('Email')}>Email</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleChangeType('Phone number')}>Phone number</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleChangeType('URL')}>URL</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleChangeType('Password')}>Password</DropdownMenuItem>
-            </DropdownMenuGroup>
-            
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuLabel className="text-xs text-muted-foreground">Selection</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => handleChangeType('Single select')}>Single select</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleChangeType('Multiple select')}>Multiple select</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleChangeType('Collaborator')}>Collaborator</DropdownMenuItem>
-            </DropdownMenuGroup>
-            
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuLabel className="text-xs text-muted-foreground">Relationship</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => handleChangeType('Link to table')}>Link to table</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleChangeType('Lookup')}>Lookup</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleChangeType('Count')}>Count</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleChangeType('Rollup')}>Rollup</DropdownMenuItem>
-            </DropdownMenuGroup>
-            
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuLabel className="text-xs text-muted-foreground">Automatic</DropdownMenuLabel>
-              <DropdownMenuItem onClick={() => handleChangeType('Formula')}>Formula</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleChangeType('Autonumber')}>Autonumber</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleChangeType('UUID')}>UUID</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleChangeType('Created on')}>Created on</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleChangeType('Last modified')}>Last modified</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleChangeType('Created by')}>Created by</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleChangeType('Last modified by')}>Last modified by</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleChangeType('Duration')}>Duration</DropdownMenuItem>
-            </DropdownMenuGroup>
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
-        
-        <DropdownMenuItem onClick={handleRenameClick}>
-          <Edit2 className="mr-2 h-4 w-4 text-muted-foreground" />
-          <span>Rename field</span>
-        </DropdownMenuItem>
-        
-        <DropdownMenuSeparator />
-
-        {onFreeze && (
-          <DropdownMenuItem onClick={onFreeze}>
-            <span className="ml-6">{isFrozen ? 'Unfreeze field' : 'Freeze field'}</span>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          disabled={isPending || typeChanging}
+          className={cn(
+            buttonVariants({ variant: 'ghost', size: 'icon' }),
+            'h-6 w-6 ml-1 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded focus-visible:ring-0'
+          )}
+        >
+          {(isPending || typeChanging) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-56 text-sm">
+          <DropdownMenuItem onClick={() => { setAddPosition('left'); setAddValue(''); setAddOpen(true) }}>
+            <ArrowLeftToLine className="mr-2 h-4 w-4 text-muted-foreground" />
+            <span>Insert left</span>
           </DropdownMenuItem>
-        )}
+          <DropdownMenuItem onClick={() => { setAddPosition('right'); setAddValue(''); setAddOpen(true) }}>
+            <ArrowRightToLine className="mr-2 h-4 w-4 text-muted-foreground" />
+            <span>Insert right</span>
+          </DropdownMenuItem>
 
-        <DropdownMenuItem onClick={handleDelete} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
-          <Trash2 className="mr-2 h-4 w-4" />
-          <span>Delete field</span>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
+          <DropdownMenuSeparator />
+
+          {isSelectOrMultiSelect && (
+            <>
+              <DropdownMenuItem onClick={() => setOptionsEditor(columnName, true)}>
+                <ListPlus className="mr-2 h-4 w-4 text-muted-foreground" />
+                <span>Edit select options</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          )}
+
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <Type className="mr-2 h-4 w-4 text-muted-foreground" />
+              <span>Field type</span>
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-56 max-h-[400px] overflow-y-auto">
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="text-xs text-muted-foreground">Basic</DropdownMenuLabel>
+                {['Single line text', 'Long text', 'Number', 'Rating', 'Boolean', 'Date'].map(t => (
+                  <DropdownMenuItem key={t} onClick={() => handleChangeType(t)}>{t}</DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="text-xs text-muted-foreground">Validation</DropdownMenuLabel>
+                {['Email', 'Phone number', 'URL', 'Password'].map(t => (
+                  <DropdownMenuItem key={t} onClick={() => handleChangeType(t)}>{t}</DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="text-xs text-muted-foreground">Selection</DropdownMenuLabel>
+                {['Single select', 'Multiple select'].map(t => (
+                  <DropdownMenuItem key={t} onClick={() => handleSelectTypeSelect(t)}>{t}</DropdownMenuItem>
+                ))}
+              </DropdownMenuGroup>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+
+          <DropdownMenuItem onClick={() => { setRenameValue(columnName); setRenameOpen(true) }}>
+            <Edit2 className="mr-2 h-4 w-4 text-muted-foreground" />
+            <span>Rename field</span>
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
+
+          {onFreeze && (
+            <DropdownMenuItem onClick={onFreeze}>
+              <span className="ml-6">{isFrozen ? 'Unfreeze field' : 'Freeze field'}</span>
+            </DropdownMenuItem>
+          )}
+
+          <DropdownMenuItem
+            onClick={() => setDeleteOpen(true)}
+            className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            <span>Delete field</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       {/* Rename Dialog */}
-      <Dialog open={isRenameDialogOpen} onOpenChange={setIsRenameDialogOpen}>
+      <Dialog open={renameOpen} onOpenChange={setRenameOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Rename Field</DialogTitle>
@@ -204,48 +243,60 @@ export function ColumnHeaderMenu({ columnName, onFreeze, isFrozen }: ColumnHeade
               value={renameValue}
               onChange={(e) => setRenameValue(e.target.value)}
               placeholder="Enter new field name"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  handleRenameSubmit()
-                }
-              }}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleRenameSubmit() } }}
               autoFocus
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsRenameDialogOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setRenameOpen(false)}>Cancel</Button>
             <Button onClick={handleRenameSubmit}>Save changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Add Field Dialog */}
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+      <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Add Field ({addPosition})</DialogTitle>
+            <DialogTitle>Add Field ({addPosition} of "{columnName}")</DialogTitle>
+            <DialogDescription>
+              Enter a name for the new field. It will appear {addPosition} of this column.
+            </DialogDescription>
           </DialogHeader>
           <div className="py-4">
             <Input
               value={addValue}
               onChange={(e) => setAddValue(e.target.value)}
-              placeholder="Enter new field name"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  handleAddSubmit()
-                }
-              }}
+              placeholder="Enter field name"
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddSubmit() } }}
               autoFocus
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleAddSubmit}>Add field</Button>
+            <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
+            <Button onClick={handleAddSubmit} disabled={!addValue.trim()}>Add field</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </DropdownMenu>
+
+      {/* Delete Confirm Dialog */}
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Delete Field</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete <strong>"{columnName}"</strong>? All data in this field will be permanently removed. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDeleteConfirm}>
+              {isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              Delete field
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
